@@ -1,6 +1,8 @@
 import OBR, { isImage } from "@owlbear-rodeo/sdk";
 import { META_KEY, type MetaShape } from "./metadata";
 
+
+
 export function registerInitiativeContextMenu() {
     const id = META_KEY + "/menu";
 
@@ -8,7 +10,7 @@ export function registerInitiativeContextMenu() {
         id,
         icons: [
             {
-                icon: "/src/assets/add.svg",
+                icon: "/add.svg",
                 label: "Add to BattleBoard",
                 filter: {
                     every: [
@@ -23,7 +25,7 @@ export function registerInitiativeContextMenu() {
             },
             {
                 icon:
-                    "/src/assets/remove.svg",
+                    "/remove.svg",
                 label: "Remove from BattleBoard",
                 filter: {
                     every: [
