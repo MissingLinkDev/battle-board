@@ -50,7 +50,7 @@ const CONDITIONS_2024 = [
     // Common extras DMs track
     "Concentrating", "Dodging", "Disengaging", "Dashing", "Helped", "Ready", "Inspired"
 ] as const;
-type ConditionName = (typeof CONDITIONS_2024)[number];
+// type ConditionName = (typeof CONDITIONS_2024)[number];
 
 
 export default function InitiativeRow({
