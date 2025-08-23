@@ -1,0 +1,179 @@
+/* === Row chrome / spacing === */
+.ir-row>* {
+    border-bottom: unset !important;
+}
+
+/* no lines between rows */
+.ir-row td {
+    padding: 2px 2px;
+}
+
+/* py: 0.25, px: 0.25 */
+.ir-row.is-active {
+    border-left: 3px solid;
+}
+
+/* color set inline for theme */
+
+/* === Icon buttons === */
+.ir-icon-compact {
+    padding: 0 !important;
+}
+
+.ir-icon-tight {
+    padding: 2px !important;
+}
+
+/* expand/collapse chevron size */
+
+/* === Text & titles === */
+.ir-name {
+    font-weight: 600;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ir-typo-70 {
+    font-size: 0.70rem;
+}
+
+.ir-typo-75 {
+    font-size: 0.75rem;
+}
+
+.ir-typo-80 {
+    font-size: 0.80rem;
+}
+
+/* === Compact TextField look === */
+.ir-input .MuiOutlinedInput-root {
+    border-radius: 2px;
+    font-size: 0.75rem;
+    height: 24px;
+    padding: 0;
+}
+
+.ir-input .MuiOutlinedInput-input {
+    text-align: center;
+    padding: 0 2px;
+    font-size: 0.75rem;
+}
+
+/* Fixed input widths */
+.ir-w-24 .MuiOutlinedInput-input {
+    width: 24px;
+}
+
+.ir-w-28 .MuiOutlinedInput-input {
+    width: 28px;
+}
+
+.ir-w-32 .MuiOutlinedInput-input {
+    width: 32px;
+}
+
+.ir-w-34 .MuiOutlinedInput-input {
+    width: 34px;
+}
+
+.ir-w-40 .MuiOutlinedInput-input {
+    width: 40px;
+}
+
+/* === Expanded panel (spacing matched to your latest) === */
+.ir-panel {
+    padding: 8px;
+}
+
+/* p: 1 */
+.ir-panel-split {
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+}
+
+/* spacing={1.5} */
+
+.ir-col {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.ir-section-title {
+    font-weight: 700;
+    font-size: 0.8rem;
+    text-align: center;
+    margin-bottom: 6px;
+}
+
+/* mb: 0.75 */
+
+.ir-controls {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+/* spacing={1}, mb:1 */
+.ir-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* gap: 0.5 */
+.ir-ft {
+    font-size: 0.65rem;
+    color: var(--mui-palette-text-secondary, rgba(0, 0, 0, 0.6));
+}
+
+.ir-conditions {
+    text-align: center;
+}
+
+.ir-conditions .ir-section-title {
+    margin-bottom: 4px;
+}
+
+/* mb: 0.5 */
+.ir-conditions button {
+    border-radius: 4px;
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    margin-bottom: 4px;
+}
+
+/* mb: 0.5 */
+.ir-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    justify-content: center;
+}
+
+.ir-chip-row .MuiChip-root {
+    border-radius: 4px;
+    height: 22px;
+    font-size: 0.7rem;
+}
+
+/* Vertical divider between columns */
+.ir-vdiv {
+    border-left: 1px solid var(--mui-palette-divider, rgba(0, 0, 0, 0.12));
+}
+
+/* Distances list (dense) */
+.ir-list {
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+.ir-list .MuiListItem-root {
+    padding-top: 2px;
+    padding-bottom: 2px;
+    display: flex;
+    justify-content: space-between;
+}

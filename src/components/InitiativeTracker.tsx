@@ -1,0 +1,665 @@
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
+
+import Box from "@mui/material/Box";
+import Paper from "@mui/material/Paper";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import Stack from "@mui/material/Stack";
+import Button from "@mui/material/Button";
+import IconButton from "@mui/material/IconButton";
+import Tooltip from "@mui/material/Tooltip";
+import Typography from "@mui/material/Typography";
+import PlayArrowRounded from "@mui/icons-material/PlayArrowRounded";
+import StopRounded from "@mui/icons-material/StopRounded";
+import NavigateBeforeRounded from "@mui/icons-material/NavigateBeforeRounded";
+import NavigateNextRounded from "@mui/icons-material/NavigateNextRounded";
+import SettingsRounded from "@mui/icons-material/SettingsRounded";
+
+import OBR, { isImage, type Item, type Player } from "@owlbear-rodeo/sdk";
+
+import type { InitiativeItem } from "./InitiativeItem";
+import InitiativeRow from "./InitiativeRow";
+import PlayerTable from "./PlayerTable";
+import SettingsView from "./SettingsView";
+
+import { META_KEY, isMetadata, type MetaShape } from "./metadata";
+import { ensureRings, clearRings } from "./rings";
+import { registerInitiativeContextMenu } from "./initiativeMenu";
+import { sortByInitiativeDesc } from "./utils";
+import {
+    readSceneState,
+    saveSceneState,
+    onSceneStateChange,
+    type SceneState,
+    type InitiativeSettings,
+    DEFAULT_SETTINGS,
+} from "./SceneState";
+import { useCMTokens } from "./useCMTokens";
+
+
+// Convert item + metadata → InitiativeItem row (kept here to avoid path assumptions)
+function toRow(item: Item, meta: any): InitiativeItem {
+    const img = item as any; // Image extends Item
+    const liveLabel: string | undefined = img.text.plainText;
+    const liveName: string | undefined = img.name;
+
+    return {
+        id: item.id,
+        // prefer token label text, then item name, then metadata
+        name: liveLabel || liveName || meta?.name || "",
+        initiative: meta?.initiative,
+        active: meta?.active,
+        // prefer live visibility from the item so the UI toggle reflects immediately
+        visible: typeof img?.visible === "boolean" ? img.visible : meta?.visible,
+
+        ac: meta?.ac,
+        currentHP: meta?.currentHP,
+        maxHP: meta?.maxHP,
+        tempHP: meta?.tempHP,
+        conditions: meta?.conditions,
+        movement: meta?.movement,
+        attackRange: meta?.attackRange,
+    };
+}
+
+export function InitiativeTracker() {
+    const [role, setRole] = useState<"GM" | "PLAYER">("PLAYER");
+    const [started, setStarted] = useState(false);
+    const [round, setRound] = useState(0);
+    const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+    const [rows, setRows] = useState<InitiativeItem[]>([]);
+
+    const [settings, setSettings] = useState<InitiativeSettings>(DEFAULT_SETTINGS);
+    const [view, setView] = useState<"tracker" | "settings">("tracker");
+
+    // local edits tracking for diff effect
+    const localEditRef = useRef(false);
+    const prevRowsRef = useRef<InitiativeItem[]>([]);
+
+    //watching the root box for size changes
+    const rootRef = useRef<HTMLDivElement | null>(null); // attach to the outer <Box>
+    const MIN_ACTION_HEIGHT = 200;
+
+    const active = useMemo(() => rows.find((r) => r.active) ?? null, [rows]);
+    const prevActiveId = useRef<string | null>(null);
+    const rafIdRef = useRef<number | null>(null);
+
+    const sortedRows = sortByInitiativeDesc(rows);
+    // Column visibility (NEW)
+    const showAC = settings.showArmor;
+    const showHP = settings.showHP;
+    //Get all tokens
+    const cmTokens = useCMTokens();
+
+    const setOnlyExpanded = (id: string | null) =>
+        setExpandedIds(() => (id ? new Set([id]) : new Set()));
+    const toggleExpanded = (id: string) =>
+        setExpandedIds((prev) => {
+            const next = new Set(prev);
+            next.has(id) ? next.delete(id) : next.add(id);
+            return next;
+        });
+    const getActiveIndex = (items: InitiativeItem[]) =>
+        items.findIndex((it) => it.active);
+
+    // Role
+    useEffect(() => {
+        const onPlayer = (p: Player) => setRole(p.role);
+        OBR.player.getRole().then(setRole);
+        return OBR.player.onChange(onPlayer);
+    }, []);
+
+    // Load saved scene state on mount, then keep in sync with remote updates
+    useEffect(() => {
+        let unmounted = false;
+
+        const apply = (s: SceneState | null) => {
+            if (!s) return;
+            setStarted((prev) => (prev !== s.started ? s.started : prev));
+            setRound((prev) => (prev !== s.round ? s.round : prev));
+            setSettings((prev) => {
+                const merged = { ...prev, ...(s.settings ?? {}) };
+                return merged;
+            });
+        };
+
+        readSceneState()
+            .then((s) => {
+                if (!unmounted) apply(s);
+            })
+            .catch(console.error);
+
+        const unsub = onSceneStateChange(apply);
+        return () => {
+            unmounted = true;
+            unsub();
+        };
+    }, []);
+
+    // Attach a ResizeObserver to the root ONCE
+    const resizeNow = useCallback(() => {
+        const el = rootRef.current;
+        if (!el) return;
+
+        // Use scrollHeight to capture the full natural content height
+        const natural =
+            Math.max(el.scrollHeight || 0, el.getBoundingClientRect().height || 0);
+
+        OBR.action.setHeight(Math.max(natural, MIN_ACTION_HEIGHT));
+    }, []);
+
+    const scheduleResize = useCallback(() => {
+        // double rAF lets layout/paint settle (useful after toggling views/expansions)
+        requestAnimationFrame(() => requestAnimationFrame(resizeNow));
+    }, [resizeNow]);
+
+    // --- RESIZE: attach a single ResizeObserver to the whole panel --------------
+    useEffect(() => {
+        const el = rootRef.current;
+        if (!el || typeof ResizeObserver === "undefined") {
+            // still do an initial sizing if RO isn't available
+            scheduleResize();
+            return;
+        }
+
+        const ro = new ResizeObserver(() => {
+            // Any size/content change in the panel triggers a resize
+            resizeNow();
+        });
+        ro.observe(el);
+
+        // Initial sizing on mount (after first paint)
+        scheduleResize();
+
+        return () => ro.disconnect();
+    }, [resizeNow, scheduleResize]);
+
+    // --- RESIZE: when view changes (tracker <-> settings) -----------------------
+    useEffect(() => {
+        // If you have `view` state: "tracker" | "settings"
+        // Make sure to include `view` in your component and update the deps here:
+        scheduleResize();
+    }, [view, scheduleResize]);
+
+    // --- RESIZE: when data that affects height changes -------------------------
+    // 1) Row count (add/remove), 2) Which rows are expanded/collapsed
+    // NOTE: If expandedIds is a Set, serialize it to a stable string for deps.
+    useEffect(() => {
+        scheduleResize();
+    }, [sortedRows.length, Array.from(expandedIds).join("|"), scheduleResize]);
+
+    // Scene → UI sync
+    useEffect(() => {
+        const handle = async (items: Item[]) => {
+            const list: InitiativeItem[] = [];
+            for (const it of items) {
+                if (!isImage(it)) continue;
+                const meta = (it.metadata as any)[META_KEY];
+                if (isMetadata(meta)) list.push(toRow(it, meta));
+            }
+            const sorted = sortByInitiativeDesc(list);
+            setRows(sorted);
+            prevRowsRef.current = sorted;
+            localEditRef.current = false;
+        };
+
+        OBR.scene.items.getItems().then(handle);
+        return OBR.scene.items.onChange(handle);
+    }, []);
+
+    // Context menu
+    useEffect(() => registerInitiativeContextMenu(), []);
+
+    // Centralized metadata writer (diff local edits) + resort on initiative change
+    useEffect(() => {
+        if (!localEditRef.current) {
+            prevRowsRef.current = rows;
+            return;
+        }
+
+        const prev = prevRowsRef.current;
+        const prevById = new Map(prev.map((r) => [r.id, r]));
+        type Patch = Partial<{
+            name: string;
+            initiative: number;
+            ac: number;
+            currentHP: number;
+            maxHP: number;
+            tempHP: number;
+            conditions: string[];
+            movement: number;
+            attackRange: number;
+            active: boolean;
+            visible: boolean;
+            elevation: number;
+        }>;
+
+        const patches: { id: string; patch: Patch }[] = [];
+        let initiativeChanged = false;
+
+        for (const now of rows) {
+            const before = prevById.get(now.id);
+            if (!before) continue;
+
+            const patch: Patch = {};
+            if (now.name !== before.name) patch.name = now.name;
+            if (now.initiative !== before.initiative) {
+                patch.initiative = now.initiative;
+                initiativeChanged = true;
+            }
+            if (now.ac !== before.ac) patch.ac = now.ac;
+            if (now.currentHP !== before.currentHP) patch.currentHP = now.currentHP;
+            if (now.maxHP !== before.maxHP) patch.maxHP = now.maxHP;
+            if (now.tempHP !== before.tempHP) patch.tempHP = now.tempHP;
+            if (now.movement !== before.movement) patch.movement = now.movement;
+            if (now.attackRange !== before.attackRange) patch.attackRange = now.attackRange;
+            if (now.active !== before.active) patch.active = now.active;
+            if (now.visible !== before.visible) patch.visible = now.visible;
+            if (JSON.stringify(now.conditions) !== JSON.stringify(before.conditions)) {
+                patch.conditions = now.conditions;
+            }
+
+            if (Object.keys(patch).length) patches.push({ id: now.id, patch });
+        }
+
+        if (patches.length) {
+            OBR.scene.items.updateItems(
+                patches.map((p) => p.id),
+                (items) => {
+                    for (const it of items) {
+                        const meta = (it.metadata as any)[META_KEY];
+                        const p = patches.find((x) => x.id === it.id)?.patch;
+                        if (!p) continue;
+
+                        // write-through to metadata (keeps your extension state portable)
+                        if (meta) Object.assign(meta, p);
+                    }
+                }
+            );
+        }
+
+        if (initiativeChanged) {
+            setRows((s) => sortByInitiativeDesc(s));
+        }
+
+        localEditRef.current = false;
+        prevRowsRef.current = rows;
+    }, [rows]);
+
+    // Auto-manage rings when the active row (or started state) changes, including remote updates
+    useEffect(() => {
+        if (!settings.showRangeRings) {
+            // If disabled, always clear rings
+            clearRings().catch(console.error);
+            return;
+        }
+        // cancel any scheduled work from a previous run
+        if (rafIdRef.current !== null) {
+            cancelAnimationFrame(rafIdRef.current);
+            rafIdRef.current = null;
+        }
+
+        // sync path only; no async/await here
+        if (!started || !active) {
+            // end combat or no active → wipe any rings
+            clearRings().catch(console.error);
+            prevActiveId.current = null;
+            return;
+        }
+
+        // if the active token changed, remove old rings first
+        if (prevActiveId.current && prevActiveId.current !== active.id) {
+            clearRings().catch(console.error);
+        }
+
+        // schedule the async ensure call without making the effect async
+        rafIdRef.current = requestAnimationFrame(() => {
+            ensureRings({
+                tokenId: active.id,
+                movement: active.movement ?? 0,
+                attackRange: active.attackRange ?? 0,
+                moveAttached: false,
+                rangeAttached: true,
+            }).catch(console.error);
+            prevActiveId.current = active.id;
+            rafIdRef.current = null;
+        });
+
+        // cleanup stays synchronous
+        return () => {
+            if (rafIdRef.current !== null) {
+                cancelAnimationFrame(rafIdRef.current);
+                rafIdRef.current = null;
+            }
+        };
+    }, [started, active?.id, active?.movement, active?.attackRange]);
+
+    // Turn controls
+    const handleStart = async () => {
+        const sorted = sortByInitiativeDesc(rows);
+        if (!sorted.length) return;
+        const firstId = sorted[0]?.id ?? null;
+
+        setRows(sorted.map((r, i) => ({ ...r, active: i === 0 })));
+        await OBR.scene.items.updateItems(sorted.map((r) => r.id), (items) => {
+            for (let i = 0; i < items.length; i++) {
+                const meta = (items[i].metadata as any)[META_KEY];
+                if (meta) meta.active = i === 0;
+            }
+        });
+        setOnlyExpanded(firstId);
+        setRound(1);
+        setStarted(true);
+
+        // persist to scene
+        await saveSceneState({ started: true, round: 1 });
+    };
+
+    const handleEnd = async () => {
+        const ids = rows.map((r) => r.id);
+        setRows((prev) => prev.map((r) => ({ ...r, active: false })));
+        await OBR.scene.items.updateItems(ids, (items) => {
+            for (const it of items) {
+                const meta = (it.metadata as any)[META_KEY];
+                if (meta) meta.active = false;
+            }
+        });
+        setOnlyExpanded(null);
+        setRound(0);
+        setStarted(false);
+        await clearRings();
+
+        // persist to scene
+        await saveSceneState({ started: false, round: 0 });
+    };
+
+    const handleNext = async () => {
+        if (!started || rows.length === 0) return;
+        const sorted = sortByInitiativeDesc(rows);
+        const activeIdx = getActiveIndex(sorted);
+        const nextIdx = activeIdx === -1 ? 0 : (activeIdx + 1) % sorted.length;
+        const wrapped = activeIdx !== -1 && nextIdx === 0;
+
+        const nextActive = sorted[nextIdx] ?? null;
+        const nextRound = wrapped ? round + 1 : round;
+
+        setRows(sorted.map((r, i) => ({ ...r, active: i === nextIdx })));
+        await OBR.scene.items.updateItems(sorted.map((r) => r.id), (items) => {
+            for (let i = 0; i < items.length; i++) {
+                const meta = (items[i].metadata as any)[META_KEY];
+                if (meta) meta.active = i === nextIdx;
+            }
+        });
+        setOnlyExpanded(nextActive?.id ?? null);
+        if (wrapped) {
+            setRound(nextRound);
+            // persist only when we wrapped
+            await saveSceneState({ started: true, round: nextRound });
+        }
+
+    };
+
+    const handlePrev = async () => {
+        if (!started || rows.length === 0) return;
+        const sorted = sortByInitiativeDesc(rows);
+        const activeIdx = getActiveIndex(sorted);
+        const prevIdx = activeIdx === -1 ? sorted.length - 1 : (activeIdx - 1 + sorted.length) % sorted.length;
+        const wrappedBack = activeIdx === 0;
+
+        const prevActive = sorted[prevIdx] ?? null;
+        const nextRound = wrappedBack ? Math.max(1, round - 1) : round;
+
+        setRows(sorted.map((r, i) => ({ ...r, active: i === prevIdx })));
+        await OBR.scene.items.updateItems(sorted.map((r) => r.id), (items) => {
+            for (let i = 0; i < items.length; i++) {
+                const meta = (items[i].metadata as any)[META_KEY];
+                if (meta) meta.active = i === prevIdx;
+            }
+        });
+        setOnlyExpanded(prevActive?.id ?? null);
+        if (wrappedBack) {
+            setRound(nextRound);
+            // persist only when we wrapped back to bottom
+            await saveSceneState({ started: true, round: nextRound });
+        }
+
+    };
+
+    const removeFromInitiative = async (id: string) => {
+        try {
+            // Remove initiative metadata from the item (which removes it from your board)
+            await OBR.scene.items.updateItems([id], (items) => {
+                for (const it of items) {
+                    if ((it.metadata as any)[META_KEY]) {
+                        delete (it.metadata as any)[META_KEY];
+                    }
+                }
+            });
+
+            // Update local UI state
+            setRows((prev) => prev.filter((r) => r.id !== id));
+            setExpandedIds((prev) => {
+                const next = new Set(prev);
+                next.delete(id);
+                return next;
+            });
+        } catch (e) {
+            console.error("Failed to remove from initiative:", e);
+        }
+    };
+
+    if (view === "settings") {
+        // Settings screen
+        return (
+            <SettingsView
+                value={settings}
+                onChange={async (next) => {
+                    setSettings(next);
+                    await saveSceneState({ settings: next });
+                }}
+                onBack={() => setView("tracker")}
+            />
+        );
+    }
+
+    const handleAddAll = async () => {
+        // rows = current initiative rows; skip anything already added
+        const existingIds = new Set(rows.map((r) => r.id));
+        const idsToAdd = cmTokens.filter((t) => !existingIds.has(t.id)).map((t) => t.id);
+
+        if (idsToAdd.length === 0) return;
+
+        await OBR.scene.items.updateItems(idsToAdd, (items) => {
+            for (const it of items) {
+                // don’t overwrite if a valid block already exists
+                const current = (it.metadata as any)[META_KEY];
+                if (isMetadata(current)) continue;
+
+                // match your context‑menu displayName behavior
+                let displayName = (isImage(it) && (it as any).text?.plainText) || (it as any).name || "Unnamed";
+
+                (it.metadata as any)[META_KEY] = {
+                    initiative: 0,
+                    name: displayName,
+                    active: false,
+                    visible: it.visible,
+
+                    ac: 10,
+                    currentHP: 10,
+                    maxHP: 10,
+                    tempHP: 0,
+                    conditions: [],
+
+                    movement: 30,
+                    attackRange: 0, // default 0 so range ring won’t draw
+
+                    elevation: 0,
+                } as MetaShape;
+            }
+        });
+
+        // Your existing Scene→UI sync effect will pick up the change and populate rows
+    };
+
+
+    return (
+        <Box
+            ref={rootRef}
+            sx={{ display: "flex", flexDirection: "column", height: "100%", minWidth: 0 }}
+        >
+            {role === "GM" ? (
+                <TableContainer
+                    component={Paper}
+                    sx={{
+                        flex: 1,
+                        minHeight: 166,
+                        borderRadius: 0,
+                        overflow: "auto",
+                        display: "flex",          // 👈 make it a flex container
+                        flexDirection: "column",  // 👈 stack table + empty/spacer vertically
+                    }}
+                >
+                    <Table
+                        stickyHeader
+                        size="small"
+                        aria-label="initiative table"
+                        sx={{
+                            tableLayout: "auto",
+                            width: "100%",
+                            "& td, & th": { py: 0.25, px: 0.25 },
+                            "& thead th": { fontSize: "0.72rem", letterSpacing: 0.4, py: 0.9, height: 28 },
+                        }}
+                    >
+                        <TableHead>
+                            <TableRow>
+                                <TableCell width={18}></TableCell>
+                                <TableCell width={32} align="center">INIT</TableCell>
+                                <TableCell align="center">NAME</TableCell>
+                                {showAC && <TableCell width={36} align="center">AC</TableCell>}
+                                {showHP && <TableCell width={62} align="center">HP</TableCell>}
+                                {showHP && <TableCell width={36} align="center">TP</TableCell>}
+                                {showHP && <TableCell width={18}></TableCell>}
+                            </TableRow>
+                        </TableHead>
+
+                        <TableBody>
+                            {sortedRows.map((it) => (
+                                <InitiativeRow
+                                    key={it.id}
+                                    row={it}
+                                    expanded={expandedIds.has(it.id)}
+                                    onToggleExpand={() => {
+                                        toggleExpanded(it.id);
+                                        // if you have resizeNow, keep this nudge; otherwise safe to remove
+                                        requestAnimationFrame(() => requestAnimationFrame(resizeNow));
+                                    }}
+                                    onChange={(draft) => {
+                                        localEditRef.current = true;
+                                        setRows((prev) => prev.map((r) => (r.id === it.id ? { ...r, ...draft } : r)));
+                                    }}
+                                    onSizeChange={resizeNow}
+                                    onRemove={removeFromInitiative}
+                                    settings={{
+                                        showMovementRange: settings.showMovementRange,
+                                        showAttackRange: settings.showAttackRange,
+                                        showConditions: settings.showConditions,
+                                        showDistances: settings.showDistances,
+                                        showAC,
+                                        showHP,
+                                    }}
+                                />
+                            ))}
+                        </TableBody>
+                    </Table>
+
+                    {sortedRows.length === 0 ? (
+                        // Empty-state fills the table's row area
+                        <Box
+                            sx={{
+                                flex: 1,
+                                minHeight: 0,
+                                height: "100%",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                px: 2,
+                                textAlign: "center",
+                            }}
+                        >
+                            <Box>
+                                <Typography variant="body2" sx={{ color: "text.secondary", mb: 1 }}>
+                                    No creatures in initiative yet. Add a character to the Battle Board to get started.
+                                </Typography>
+                                <Button size="small" variant="outlined" onClick={handleAddAll} sx={{ borderRadius: 1 }}>
+                                    Add All in Scene
+                                </Button>
+                            </Box>
+                        </Box>
+                    ) : (
+                        // Spacer ensures the footer is pinned to the bottom even with few rows
+                        <Box sx={{ flex: 1, minHeight: 0 }} />
+                    )}
+                </TableContainer>
+            ) : (
+                settings.disablePlayerList ? (
+                    <Box sx={{ p: 2, textAlign: "center", color: "text.secondary" }}>
+                        <Typography variant="body2">The DM has disabled the player initiative list.</Typography>
+                    </Box>
+                ) : (
+                    <PlayerTable items={sortedRows} />
+                )
+            )}
+
+            {role === "GM" && (
+                <Box sx={{ px: 1, py: 0.75, bgcolor: "background.default" }}>
+                    <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+                        <Stack direction="row" alignItems="center" spacing={1.25}>
+                            {started ? (
+                                <Button disabled={sortedRows.length === 0} size="small" variant="contained" color="error" startIcon={<StopRounded />} onClick={handleEnd} sx={{ minWidth: 96 }}>
+                                    End
+                                </Button>
+                            ) : (
+                                <Button disabled={sortedRows.length === 0} size="small" variant="contained" startIcon={<PlayArrowRounded />} onClick={handleStart} sx={{ minWidth: 96 }}>
+                                    Start
+                                </Button>
+                            )}
+
+                            <IconButton
+                                size="small"
+                                onClick={handlePrev}
+                                disabled={!started || sortedRows.length === 0 || (round === 1 && getActiveIndex(sortedRows) === 0)}
+                            >
+                                <NavigateBeforeRounded />
+                            </IconButton>
+
+                            <Typography variant="body2" sx={{ minWidth: 72, textAlign: "center", fontWeight: 700 }}>
+                                Round: {round}
+                            </Typography>
+
+                            <IconButton size="small" onClick={handleNext} disabled={!started || sortedRows.length === 0}>
+                                <NavigateNextRounded />
+                            </IconButton>
+                        </Stack>
+
+                        <Stack direction="row" alignItems="center" spacing={0.5}>
+                            <Tooltip title="Settings">
+                                <IconButton size="small" onClick={() => setView("settings")}>
+                                    <SettingsRounded fontSize="small" />
+                                </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Patreon">
+                                <IconButton size="small">
+                                    <Box component="img" src="/patreon-icon.png" alt="Patreon" sx={{ width: 20, height: 20 }} />
+                                </IconButton>
+                            </Tooltip>
+                        </Stack>
+                    </Stack>
+                </Box>
+            )}
+        </Box>
+    );
+}
