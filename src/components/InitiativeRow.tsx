@@ -44,12 +44,12 @@ type Props = {
     settings?: RowSettings;
 };
 
-const CONDITIONS_2024 = [
-    "Blinded", "Charmed", "Deafened", "Frightened", "Grappled", "Incapacitated",
-    "Invisible", "Paralyzed", "Petrified", "Poisoned", "Prone", "Restrained", "Stunned",
-    // Common extras DMs track
-    "Concentrating", "Dodging", "Disengaging", "Dashing", "Helped", "Ready", "Inspired"
-] as const;
+// const CONDITIONS_2024 = [
+//     "Blinded", "Charmed", "Deafened", "Frightened", "Grappled", "Incapacitated",
+//     "Invisible", "Paralyzed", "Petrified", "Poisoned", "Prone", "Restrained", "Stunned",
+//     // Common extras DMs track
+//     "Concentrating", "Dodging", "Disengaging", "Dashing", "Helped", "Ready", "Inspired"
+// ] as const;
 // type ConditionName = (typeof CONDITIONS_2024)[number];
 
 
