@@ -47,15 +47,13 @@ function toRow(item: Item, meta: any): InitiativeItem {
     const liveLabel: string | undefined = img.text.plainText;
     const liveName: string | undefined = img.name;
 
+
     return {
         id: item.id,
-        // prefer token label text, then item name, then metadata
         name: liveLabel || liveName || meta?.name || "",
         initiative: meta?.initiative,
         active: meta?.active,
-        // prefer live visibility from the item so the UI toggle reflects immediately
         visible: typeof img?.visible === "boolean" ? img.visible : meta?.visible,
-
         ac: meta?.ac,
         currentHP: meta?.currentHP,
         maxHP: meta?.maxHP,
@@ -64,6 +62,8 @@ function toRow(item: Item, meta: any): InitiativeItem {
         movement: meta?.movement,
         attackRange: meta?.attackRange,
         playerCharacter: meta?.playerCharacter,
+        movementColor: meta.movementColor ?? null,
+        rangeColor: meta.rangeColor ?? null,
     };
 }
 
@@ -97,8 +97,7 @@ export function InitiativeTracker() {
     //Get all tokens
     const cmTokens = useCMTokens();
 
-    const setOnlyExpanded = (id: string | null) =>
-        setExpandedIds(() => (id ? new Set([id]) : new Set()));
+
     const toggleExpanded = (id: string) =>
         setExpandedIds((prev) => {
             const next = new Set(prev);
@@ -238,6 +237,8 @@ export function InitiativeTracker() {
             active: boolean;
             visible: boolean;
             playerCharacter: boolean;
+            movementColor: string | null;
+            rangeColor: string | null;
         }>;
 
         const patches: { id: string; patch: Patch }[] = [];
@@ -267,6 +268,9 @@ export function InitiativeTracker() {
             if (now.playerCharacter !== before.playerCharacter) {
                 patch.playerCharacter = now.playerCharacter; // NEW
             }
+            if (now.movementColor !== before.movementColor) patch.movementColor = now.movementColor; // NEW
+            if (now.rangeColor !== before.rangeColor) patch.rangeColor = now.rangeColor;
+
 
             if (Object.keys(patch).length) patches.push({ id: now.id, patch });
         }
@@ -336,6 +340,8 @@ export function InitiativeTracker() {
                 attackRange: active.attackRange ?? 0,
                 moveAttached: false,
                 rangeAttached: true,
+                movementColor: active.movementColor ?? null,
+                rangeColor: active.rangeColor ?? null,
             }).catch(console.error);
             prevActiveId.current = active.id;
             rafIdRef.current = null;
@@ -348,13 +354,12 @@ export function InitiativeTracker() {
                 rafIdRef.current = null;
             }
         };
-    }, [started, active?.id, active?.movement, active?.attackRange, active?.playerCharacter, settings.showRangeRings]);
+    }, [started, active?.id, active?.movement, active?.attackRange, active?.playerCharacter, settings.showRangeRings, active?.movementColor, active?.rangeColor,]);
 
     // Turn controls
     const handleStart = async () => {
         const sorted = sortByInitiativeDesc(rows);
         if (!sorted.length) return;
-        const firstId = sorted[0]?.id ?? null;
 
         setRows(sorted.map((r, i) => ({ ...r, active: i === 0 })));
         await OBR.scene.items.updateItems(sorted.map((r) => r.id), (items) => {
@@ -363,7 +368,6 @@ export function InitiativeTracker() {
                 if (meta) meta.active = i === 0;
             }
         });
-        setOnlyExpanded(firstId);
         setRound(1);
         setStarted(true);
 
@@ -380,7 +384,7 @@ export function InitiativeTracker() {
                 if (meta) meta.active = false;
             }
         });
-        setOnlyExpanded(null);
+        // setOnlyExpanded(null);
         setRound(0);
         setStarted(false);
         await clearRings("normal");
@@ -395,8 +399,6 @@ export function InitiativeTracker() {
         const activeIdx = getActiveIndex(sorted);
         const nextIdx = activeIdx === -1 ? 0 : (activeIdx + 1) % sorted.length;
         const wrapped = activeIdx !== -1 && nextIdx === 0;
-
-        const nextActive = sorted[nextIdx] ?? null;
         const nextRound = wrapped ? round + 1 : round;
 
         setRows(sorted.map((r, i) => ({ ...r, active: i === nextIdx })));
@@ -406,7 +408,6 @@ export function InitiativeTracker() {
                 if (meta) meta.active = i === nextIdx;
             }
         });
-        setOnlyExpanded(nextActive?.id ?? null);
         if (wrapped) {
             setRound(nextRound);
             // persist only when we wrapped
@@ -421,8 +422,6 @@ export function InitiativeTracker() {
         const activeIdx = getActiveIndex(sorted);
         const prevIdx = activeIdx === -1 ? sorted.length - 1 : (activeIdx - 1 + sorted.length) % sorted.length;
         const wrappedBack = activeIdx === 0;
-
-        const prevActive = sorted[prevIdx] ?? null;
         const nextRound = wrappedBack ? Math.max(1, round - 1) : round;
 
         setRows(sorted.map((r, i) => ({ ...r, active: i === prevIdx })));
@@ -432,7 +431,6 @@ export function InitiativeTracker() {
                 if (meta) meta.active = i === prevIdx;
             }
         });
-        setOnlyExpanded(prevActive?.id ?? null);
         if (wrappedBack) {
             setRound(nextRound);
             // persist only when we wrapped back to bottom
@@ -548,7 +546,7 @@ export function InitiativeTracker() {
                         <TableHead>
                             <TableRow>
                                 <TableCell width={18}></TableCell>
-                                <TableCell width={32} align="center">INIT</TableCell>
+                                <TableCell width={40} align="center">INIT</TableCell>
                                 <TableCell align="center">NAME</TableCell>
                                 {showAC && <TableCell width={36} align="center">AC</TableCell>}
                                 {showHP && <TableCell width={62} align="center">HP</TableCell>}

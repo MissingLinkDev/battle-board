@@ -67,17 +67,18 @@ export function CommitTextField({
 }
 
 /* -------------------- Number (with optional math & clamp) -------------------- */
-type CommitNumberFieldProps = BaseProps & {
+type CommitNumberFieldProps = Omit<TextFieldProps, "type" | "onChange" | "value" | "inputMode"> & {
     value: number;
-    /** Enable math parsing like "+5", "-3", "10+2-4". Default: false */
+    onCommit: (n: number) => void;
     allowMath?: boolean;
-    /** Base used for relative math; defaults to current `value` */
     mathBase?: number;
-    /** Clamp range */
     min?: number;
     max?: number;
-    /** Optional final transform before commit (e.g., rounding) */
     finalize?: (n: number) => number;
+
+    // NEW: let callers override input mode & pattern safely
+    inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+    pattern?: string;
 };
 
 export function CommitNumberField({
@@ -89,6 +90,8 @@ export function CommitNumberField({
     max,
     finalize,
     slotProps,
+    inputMode,     // NEW
+    pattern,       // NEW
     ...rest
 }: CommitNumberFieldProps) {
     const [text, setText] = useState(String(value ?? 0));
@@ -102,10 +105,12 @@ export function CommitNumberField({
         let next: number;
 
         if (allowMath) {
+            // full math mode (supports "52-4", etc.)
             next = evalMathInput(raw, base);
         } else {
-            const digits = (raw ?? "").toString().replace(/[^\d-]/g, "");
-            const parsed = Number(digits);
+            // plain decimal parse: keep the user's decimal input
+            const cleaned = (raw ?? "").toString().trim().replace(/,/g, "");
+            const parsed = Number(cleaned);
             next = Number.isFinite(parsed) ? parsed : value;
         }
 
@@ -139,11 +144,14 @@ export function CommitNumberField({
         composingRef.current = false;
     };
 
+    const resolvedInputMode =
+        inputMode ?? (allowMath ? "text" : "numeric");
+
     return (
         <TextField
             {...rest}
             type="text"       // avoid native steppers
-            inputMode="numeric"
+            inputMode={resolvedInputMode}
             value={text}
             inputRef={inputRef}
             onChange={(e) => setText(e.target.value)}

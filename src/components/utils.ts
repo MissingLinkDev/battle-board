@@ -1,5 +1,22 @@
-export function sortByInitiativeDesc<T extends { initiative?: number }>(items: T[]): T[] {
-    return [...items].sort((a, b) => (b.initiative ?? 0) - (a.initiative ?? 0));
+import type { InitiativeItem } from "./InitiativeItem";
+
+export function sortByInitiativeDesc(list: InitiativeItem[]) {
+    return [...list].sort((a, b) => {
+        const ai = a.initiative ?? 0;
+        const bi = b.initiative ?? 0;
+
+        const af = Math.floor(ai);
+        const bf = Math.floor(bi);
+
+        // Primary: higher integer bucket first (15 before any 14.x)
+        if (bf !== af) return bf - af;
+
+        // Secondary (same integer): smaller decimal first (14 before 14.1 before 14.2)
+        if (ai !== bi) return ai - bi;
+
+        // Tertiary: stable fallback so order doesn’t jump around on ties
+        return (a.name ?? "").localeCompare(b.name ?? "");
+    });
 }
 
 /** Clamp a number between min and max */

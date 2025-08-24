@@ -1,7 +1,7 @@
-export interface InitiativeItem {
-    initiative: number;
-    name: string;
+export type InitiativeItem = {
     id: string;
+    name: string;
+    initiative: number;
     active: boolean;
     visible: boolean;
     ac: number;
@@ -12,4 +12,6 @@ export interface InitiativeItem {
     movement: number;
     attackRange: number;
     playerCharacter: boolean;
-}
+    movementColor?: string | null;  // NEW
+    rangeColor?: string | null;     // NEW
+};

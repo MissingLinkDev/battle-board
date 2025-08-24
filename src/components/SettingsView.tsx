@@ -42,7 +42,6 @@ export default function SettingsView({ value, onChange, onBack, rows }: Props) {
                     ["HP", "showHP"],
                     ["Movement Range", "showMovementRange"],
                     ["Attack Range", "showAttackRange"],
-                    ["Conditions", "showConditions"],
                     ["Distances", "showDistances"],
                     ["DM Distance Rings Toggle", "dmRingToggle"],
                 ] as const,
@@ -107,7 +106,14 @@ export default function SettingsView({ value, onChange, onBack, rows }: Props) {
                 const meta = (active.metadata as any)[META_KEY] as {
                     movement?: number;
                     attackRange?: number;
+                    playerCharacter?: boolean; // <-- expect this in metadata
                 };
+
+                // If the toggle is "Show Range Rings for Player Characters", do nothing for non‑PCs
+                if (!meta?.playerCharacter) {
+                    await clearRings();
+                    return;
+                }
 
                 // Only pass through the ring types that are enabled
                 await ensureRings({

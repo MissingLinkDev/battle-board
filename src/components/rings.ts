@@ -136,6 +136,8 @@ export async function ensureRings(params: {
     rangeAttached?: boolean; // default true
     visible?: boolean;
     variant?: RingVariant;
+    movementColor?: string | null;
+    rangeColor?: string | null;
 }) {
     const {
         tokenId,
@@ -145,8 +147,12 @@ export async function ensureRings(params: {
         rangeAttached = true,
         visible = true,
         variant = "normal",
+        movementColor = null,
+        rangeColor = null,
     } = params;
 
+    const moveStroke = movementColor ?? MOVEMENT_COLOR;
+    const rangeStroke = rangeColor ?? RANGE_COLOR;
     // Get the token (for initial placement center)
     const [token] = await OBR.scene.items.getItems((it) => it.id === tokenId);
     if (!token) return;
@@ -171,6 +177,7 @@ export async function ensureRings(params: {
         layer?: string;
         attachedTo?: string | null;
         visible?: boolean;
+        colorChanged?: boolean;
     }[] = [];
     const toDelete: string[] = [];
 
@@ -190,7 +197,7 @@ export async function ensureRings(params: {
                         tokenId,
                         center,
                         diameterPx: wantMove,
-                        color: MOVEMENT_COLOR,
+                        color: moveStroke ?? MOVEMENT_COLOR,
                         kind: "move",
                         attached: moveAttached,
                         visible,
@@ -206,13 +213,16 @@ export async function ensureRings(params: {
                     (existingMove.position.x !== center.x || existingMove.position.y !== center.y);
 
                 const needsVis = existingMove.visible !== visible;
+                const needsColor =
+                    ((existingMove as any).style?.strokeColor ?? (existingMove as any).strokeColor) !== moveStroke;
 
-                if (needsSize || needsPos || needsVis) {
+                if (needsSize || needsPos || needsVis || needsColor) {
                     toUpdate.push({
                         id: existingMove.id,
                         ...(needsSize ? { width: wantMove, height: wantMove } : {}),
                         ...(needsPos ? { position: center } : {}),
                         ...(needsVis ? { visible } : {}),
+                        ...(needsColor ? { colorChanged: true } : {}),
                     });
                 }
             }
@@ -222,7 +232,7 @@ export async function ensureRings(params: {
                     tokenId,
                     center,
                     diameterPx: wantMove,
-                    color: MOVEMENT_COLOR,
+                    color: moveStroke ?? MOVEMENT_COLOR,
                     kind: "move",
                     attached: moveAttached,
                     visible,
@@ -246,7 +256,7 @@ export async function ensureRings(params: {
                         tokenId,
                         center,
                         diameterPx: wantRange,
-                        color: RANGE_COLOR,
+                        color: rangeStroke ?? RANGE_COLOR,
                         kind: "range",
                         attached: rangeAttached,
                         visible,
@@ -261,13 +271,16 @@ export async function ensureRings(params: {
                     (existingRange.position.x !== center.x || existingRange.position.y !== center.y);
 
                 const needsVisR = existingRange.visible !== visible;
+                const needsColor =
+                    ((existingRange as any).style?.strokeColor ?? (existingRange as any).strokeColor) !== rangeStroke;
 
-                if (needsSize || needsPos || needsVisR) {
+                if (needsSize || needsPos || needsVisR || needsColor) {
                     toUpdate.push({
                         id: existingRange.id,
                         ...(needsSize ? { width: wantRange, height: wantRange } : {}),
                         ...(needsPos ? { position: center } : {}),
                         ...(needsVisR ? { visible } : {}),
+                        ...(needsColor ? { colorChanged: true } : {}),
                     });
                 }
             }
@@ -277,7 +290,7 @@ export async function ensureRings(params: {
                     tokenId,
                     center,
                     diameterPx: wantRange,
-                    color: RANGE_COLOR,
+                    color: rangeStroke ?? RANGE_COLOR,
                     kind: "range",
                     attached: rangeAttached,
                     visible,
@@ -301,7 +314,11 @@ export async function ensureRings(params: {
                     if (upd.width !== undefined) it.width = upd.width;
                     if (upd.height !== undefined) it.height = upd.height;
                     if (upd.position) it.position = upd.position;
-                    if (upd.visible !== undefined) (it as any).visible = upd.visible; // 👈 add this line
+                    if (upd.visible !== undefined) it.visible = upd.visible;      // keep it as a native prop
+                    if (upd.colorChanged) {
+                        const s = (it as any).style ?? {};
+                        (it as any).style = { ...s, strokeColor: (it.metadata as any).kind === "move" ? moveStroke : rangeStroke };
+                    }
                 }
             }
         );

@@ -11,19 +11,18 @@ import KeyboardArrowUp from "@mui/icons-material/KeyboardArrowUp";
 import Stack from "@mui/material/Stack";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
-import Chip from "@mui/material/Chip";
 import VisibilityOffRounded from "@mui/icons-material/VisibilityOffRounded";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
+import RadarRounded from "@mui/icons-material/RadarRounded";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Checkbox from "@mui/material/Checkbox";
 
 import type { InitiativeItem } from "./InitiativeItem";
 import { CommitNumberField } from "./CommitFields";
 import { ensureRings, clearRingsFor } from "./rings";
-import CloseRounded from "@mui/icons-material/CloseRounded";
-import Add from "@mui/icons-material/Add";
-import RadarRounded from "@mui/icons-material/RadarRounded";
-import FormControlLabel from "@mui/material/FormControlLabel";
-import Checkbox from "@mui/material/Checkbox";
+import ColorPicker from "./ColorPicker";
+
 
 type RowSettings = {
     showMovementRange: boolean;
@@ -78,6 +77,8 @@ export default function InitiativeRow({
     const [editingField, setEditingField] = useState<null | "cur" | "max" | "temp" | "ac" | null>(null);
     const [menuPos, setMenuPos] = useState<{ mouseX: number; mouseY: number } | null>(null);
     const [playerCharacter, setPlayerCharacter] = useState<boolean>(!!row.playerCharacter);
+    const [movementColor, setMovementColor] = useState<string | null | undefined>(row.movementColor ?? null);
+    const [rangeColor, setRangeColor] = useState<string | null | undefined>(row.rangeColor ?? null);
 
 
     const [dmPreview, setDmPreview] = useState(false);
@@ -132,6 +133,8 @@ export default function InitiativeRow({
         setMovement(row.movement);
         setAttackRange(row.attackRange);
         setPlayerCharacter(!!row.playerCharacter); // NEW
+        setMovementColor(row.movementColor ?? null);
+        setRangeColor(row.rangeColor ?? null);
     }, [
         row.id,
         row.initiative,
@@ -141,7 +144,9 @@ export default function InitiativeRow({
         row.ac,
         row.movement,
         row.attackRange,
-        row.playerCharacter, // NEW
+        row.playerCharacter,
+        row.movementColor,
+        row.rangeColor
     ]);
 
     // Style helpers
@@ -229,9 +234,11 @@ export default function InitiativeRow({
             moveAttached: false,
             rangeAttached: true,
             visible: false,   // DM-only
-            variant: "dm",    // separate set from normal rings
+            variant: "dm",
+            movementColor,
+            rangeColor,
         }).catch(console.error);
-    }, [dmPreview, movement, attackRange, row.id]);
+    }, [dmPreview, movement, attackRange, movementColor, rangeColor, row.id]);
 
     useEffect(() => () => { clearRingsFor(row.id, "dm").catch(() => { }); }, [row.id]);
 
@@ -246,6 +253,8 @@ export default function InitiativeRow({
                 rangeAttached: true,
                 visible: false,
                 variant: "dm",
+                movementColor,
+                rangeColor,
             });
             setDmPreview(true);
         } else {
@@ -260,7 +269,10 @@ export default function InitiativeRow({
             <TableRow
                 hover
                 selected={!!row.active}
-                onClick={onRequestActivate}
+                onClick={() => {
+                    onToggleExpand?.();
+                    onRequestActivate?.();
+                }}
                 onContextMenuCapture={handleContextMenuCapture}
                 sx={{
                     cursor: "context-menu",
@@ -295,6 +307,10 @@ export default function InitiativeRow({
                         size="small"
                         variant="outlined"
                         value={initiative}
+                        allowMath={false}
+                        inputMode="decimal"
+                        pattern="[0-9]*\\.?[0-9]?"
+                        finalize={(n) => Math.round(n * 10) / 10}
                         onCommit={(val) => {
                             setInitiative(val);
                             bubble({ initiative: val });
@@ -306,7 +322,7 @@ export default function InitiativeRow({
                                 autoFocus: true,
                                 onFocus: (e: any) => e.currentTarget.select(),
                                 "aria-label": "initiative",
-                                style: { ...baseHtmlInput.style, width: 24 },
+                                style: { ...baseHtmlInput.style, width: 32 },
                             },
                         }}
                     />
@@ -613,93 +629,43 @@ export default function InitiativeRow({
                                     </Box>
                                     {/* Movement + Attack Range inputs (conditional) */}
                                     {(vis.move || vis.range) && (
-                                        <Stack direction="row" spacing={1} justifyContent="center" sx={{ mb: 1 }}>
-                                            {vis.move && (
-                                                <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                                                    <Typography sx={{ fontSize: "0.75rem" }}>Move</Typography>
-                                                    <CommitNumberField
-                                                        size="small"
-                                                        variant="outlined"
-                                                        value={movement}
-                                                        onCommit={(v) => { setMovement(v); bubble?.({ movement: v }); }}
-                                                        sx={{ "& .MuiOutlinedInput-root": { borderRadius: 0.5, fontSize: "0.75rem", height: 24, p: 0 } }}
-                                                        slotProps={{
-                                                            htmlInput: {
-                                                                inputMode: "numeric",
-                                                                pattern: "[0-9]*",
-                                                                "aria-label": "movement",
-                                                                style: { textAlign: "center", padding: "0 2px", width: 40, fontSize: "0.75rem" },
-                                                            },
-                                                        }}
-                                                    />
-                                                    <Typography sx={{ fontSize: "0.65rem", color: "text.secondary" }}>ft</Typography>
-                                                </Box>
-                                            )}
-                                            {vis.range && (
-                                                <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                                                    <Typography sx={{ fontSize: "0.75rem" }}>Range</Typography>
-                                                    <CommitNumberField
-                                                        size="small"
-                                                        variant="outlined"
-                                                        value={attackRange}
-                                                        onCommit={(v) => { setAttackRange(v); bubble?.({ attackRange: v }); }}
-                                                        sx={{ "& .MuiOutlinedInput-root": { borderRadius: 0.5, fontSize: "0.75rem", height: 24, p: 0 } }}
-                                                        slotProps={{
-                                                            htmlInput: {
-                                                                inputMode: "numeric",
-                                                                pattern: "[0-9]*",
-                                                                "aria-label": "attack range",
-                                                                style: { textAlign: "center", padding: "0 2px", width: 40, fontSize: "0.75rem" },
-                                                            },
-                                                        }}
-                                                    />
-                                                    <Typography sx={{ fontSize: "0.65rem", color: "text.secondary" }}>ft</Typography>
-                                                </Box>
-                                            )}
+                                        <Stack direction="column" spacing={1} justifyContent="center" sx={{ mb: 1 }}>
+                                            {/* Move */}
+                                            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                                                <Typography sx={{ fontSize: "0.75rem" }}>Move</Typography>
+                                                <CommitNumberField
+                                                    size="small" variant="outlined" value={movement}
+                                                    onCommit={(v) => { setMovement(v); bubble?.({ movement: v }); }}
+                                                    sx={{ "& .MuiOutlinedInput-root": { borderRadius: 0.5, fontSize: "0.75rem", height: 24, p: 0 } }}
+                                                    slotProps={{ htmlInput: { inputMode: "numeric", pattern: "[0-9]*", "aria-label": "movement", style: { textAlign: "center", padding: "0 2px", width: 40, fontSize: "0.75rem" } } }}
+                                                />
+                                                <Typography sx={{ fontSize: "0.65rem", color: "text.secondary" }}>ft</Typography>
+                                                {/* NEW color dot (nullable → default) */}
+                                                <ColorPicker
+                                                    value={movementColor ?? null}
+                                                    onChange={(hex) => { setMovementColor(hex); bubble?.({ movementColor: hex }); }}
+                                                />
+                                            </Box>
 
+                                            {/* Range */}
+                                            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                                                <Typography sx={{ fontSize: "0.75rem" }}>Range</Typography>
+                                                <CommitNumberField
+                                                    size="small" variant="outlined" value={attackRange}
+                                                    onCommit={(v) => { setAttackRange(v); bubble?.({ attackRange: v }); }}
+                                                    sx={{ "& .MuiOutlinedInput-root": { borderRadius: 0.5, fontSize: "0.75rem", height: 24, p: 0 } }}
+                                                    slotProps={{ htmlInput: { inputMode: "numeric", pattern: "[0-9]*", "aria-label": "attack range", style: { textAlign: "center", padding: "0 2px", width: 40, fontSize: "0.75rem" } } }}
+                                                />
+                                                <Typography sx={{ fontSize: "0.65rem", color: "text.secondary" }}>ft</Typography>
+                                                {/* NEW color dot (nullable → default) */}
+                                                <ColorPicker
+                                                    value={rangeColor ?? null}
+                                                    onChange={(hex) => { setRangeColor(hex); bubble?.({ rangeColor: hex }); }}
+                                                />
+                                            </Box>
                                         </Stack>
                                     )}
-                                    {/* Conditions (conditional) */}
-                                    {vis.conditions && (
-                                        <Box sx={{ textAlign: "center" }}>
-                                            {/* Title row with + icon on the right of the text */}
-                                            <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, mb: 0.5 }}>
-                                                <Typography sx={{ fontWeight: 700, fontSize: "0.8rem" }}>
-                                                    Conditions
-                                                </Typography>
-                                                <IconButton
-                                                    size="small"
-                                                    aria-label="add condition"
-                                                    onClick={() => { console.log("Open conditions modal"); }}
-                                                    sx={{ p: 0.25 }}
-                                                >
-                                                    <Add sx={{ fontSize: "1rem" }} />
-                                                </IconButton>
-                                            </Box>
 
-                                            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, justifyContent: "center" }}>
-                                                {row.conditions.length && (
-                                                    row.conditions.map((c) => {
-                                                        const remove = () => {
-                                                            const next = row.conditions.filter((x) => x !== c);
-                                                            bubble?.({ conditions: next });
-                                                        };
-                                                        return (
-                                                            <Chip
-                                                                key={c}
-                                                                label={c}
-                                                                size="small"
-                                                                onClick={remove}                 // clicking the chip removes it
-                                                                onDelete={remove}                // clicking the close icon removes it
-                                                                deleteIcon={<CloseRounded sx={{ fontSize: "0.9rem" }} />}
-                                                                sx={{ borderRadius: 1, fontSize: "0.7rem", height: 22 }}
-                                                            />
-                                                        );
-                                                    })
-                                                )}
-                                            </Box>
-                                        </Box>
-                                    )}
                                 </Box>
 
                                 <Divider orientation="vertical" flexItem />
