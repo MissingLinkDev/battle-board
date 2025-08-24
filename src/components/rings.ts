@@ -138,6 +138,7 @@ export async function ensureRings(params: {
     variant?: RingVariant;
     movementColor?: string | null;
     rangeColor?: string | null;
+    forceRecenter?: boolean;
 }) {
     const {
         tokenId,
@@ -149,16 +150,15 @@ export async function ensureRings(params: {
         variant = "normal",
         movementColor = null,
         rangeColor = null,
+        forceRecenter = false,
     } = params;
 
     const moveStroke = movementColor ?? MOVEMENT_COLOR;
     const rangeStroke = rangeColor ?? RANGE_COLOR;
     // Get the token (for initial placement center)
     const [token] = await OBR.scene.items.getItems((it) => it.id === tokenId);
-    console.log(token);
     if (!token) return;
     const center = token.position;
-    console.log(center)
 
     const tokenFeet = getTokenFeet(token);
 
@@ -211,7 +211,7 @@ export async function ensureRings(params: {
                     existingMove.width !== wantMove || existingMove.height !== wantMove;
                 // Only attached rings should track the token's position
                 const needsPos =
-                    // moveAttached &&
+                    (moveAttached || forceRecenter) &&
                     (existingMove.position.x !== center.x || existingMove.position.y !== center.y);
 
                 const needsVis = existingMove.visible !== visible;

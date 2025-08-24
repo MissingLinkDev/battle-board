@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import Box from "@mui/material/Box";
 import Collapse from "@mui/material/Collapse";
 import Divider from "@mui/material/Divider";
@@ -82,6 +82,7 @@ export default function InitiativeRow({
 
 
     const [dmPreview, setDmPreview] = useState(false);
+    const prevActiveRef = useRef(row.active);
 
     const commitAc = (v: number) => {
         const next = Math.max(0, v);
@@ -226,6 +227,9 @@ export default function InitiativeRow({
     const closeMenu = () => setMenuPos(null);
 
     useEffect(() => {
+        const activeChanged = row.active !== prevActiveRef.current;
+        prevActiveRef.current = row.active;
+
         if (!dmPreview) return;
         console.log("calling ensure rings on row active")
         ensureRings({
@@ -238,6 +242,7 @@ export default function InitiativeRow({
             variant: "dm",
             movementColor,
             rangeColor,
+            forceRecenter: activeChanged
         }).catch(console.error);
     }, [dmPreview, movement, attackRange, movementColor, rangeColor, row.id, row.active]);
 

@@ -4,10 +4,10 @@ import Box from "@mui/material/Box";
 import Popover from "@mui/material/Popover";
 
 const PALETTE = [
-    "#2F80ED", "#F2994A", "#F2C94C", "#A66E2C",
-    "#BB6BD9", "#6FCF97", "#219653", "#EB5757",
-    "#2D9CDB", "#000000", "#4F4F4F", "#828282",
-    "#BDBDBD", "#E0E0E0", "#FFFFFF", "#27AE60",
+    "#166cfd", "#f97639", "#fe4c50", "#ffd430",
+    "#b76d25", "#884efd", "#85fe69", "#519e00",
+    "#ea8bfa", "#43e1ee", "#0e0e17", "#222222",
+    "#5a5a5a", "#b3b3b3", "#ffffff", "#943380",
 ];
 
 export default function ColorPicker({
@@ -37,11 +37,11 @@ export default function ColorPicker({
             >
                 <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4, 24px)", gap: 1 }}>
                     {/* “Default” dot (uses null to fall back to rings.ts constants) */}
-                    <Box
+                    {/* <Box
                         onClick={() => { onChange(null); setAnchor(null); }}
                         sx={{ width: 20, height: 20, borderRadius: "50%", bgcolor: "#28a745", boxShadow: 1, cursor: "pointer" }}
                         title="Use default"
-                    />
+                    /> */}
                     {PALETTE.map((hex) => (
                         <Box
                             key={hex}
