@@ -11,10 +11,7 @@ import KeyboardArrowUp from "@mui/icons-material/KeyboardArrowUp";
 import Stack from "@mui/material/Stack";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
-import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
-import Popover from "@mui/material/Popover";
-import ClickAwayListener from "@mui/material/ClickAwayListener";
 import VisibilityOffRounded from "@mui/icons-material/VisibilityOffRounded";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
@@ -25,7 +22,6 @@ import { ensureRings, clearRingsFor } from "./rings";
 import CloseRounded from "@mui/icons-material/CloseRounded";
 import Add from "@mui/icons-material/Add";
 import RadarRounded from "@mui/icons-material/RadarRounded";
-import Tooltip from "@mui/material/Tooltip";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Checkbox from "@mui/material/Checkbox";
 
@@ -84,11 +80,6 @@ export default function InitiativeRow({
     const [playerCharacter, setPlayerCharacter] = useState<boolean>(!!row.playerCharacter);
 
 
-    // HP popover state
-    const [hpAnchor, setHpAnchor] = useState<HTMLElement | null>(null);
-    const hpOpen = Boolean(hpAnchor);
-    const closeHp = () => setHpAnchor(null);
-
     const [dmPreview, setDmPreview] = useState(false);
 
     const commitAc = (v: number) => {
@@ -130,36 +121,6 @@ export default function InitiativeRow({
         if (e.key === "Escape") setEditingField(null);
     };
 
-    const [adjAmount, setAdjAmount] = useState(0);
-
-    const doDamage = () => {
-        const amt = Math.max(0, Math.abs(adjAmount));
-        if (amt === 0) return;
-
-        let t = tempHP;
-        let c = currentHP;
-        const fromTemp = Math.min(t, amt);
-        t -= fromTemp;
-        const remaining = amt - fromTemp;
-        if (remaining > 0) c = Math.max(0, c - remaining);
-
-        setTempHP(t);
-        setCurrentHP(c);
-        onChange?.({ tempHP: t, currentHP: c });
-        setAdjAmount(0);
-        closeHp();                         // ← close after apply
-    };
-
-    const doHeal = () => {
-        const amt = Math.max(0, Math.abs(adjAmount));
-        if (amt === 0) return;
-
-        const c = Math.min(maxHP, currentHP + amt);
-        setCurrentHP(c);
-        onChange?.({ currentHP: c });
-        setAdjAmount(0);
-        closeHp();                         // ← close after apply
-    };
 
     // Sync local when parent row changes
     useEffect(() => {
