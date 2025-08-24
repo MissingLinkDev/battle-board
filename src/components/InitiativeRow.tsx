@@ -79,6 +79,12 @@ export default function InitiativeRow({
     const [playerCharacter, setPlayerCharacter] = useState<boolean>(!!row.playerCharacter);
     const [movementColor, setMovementColor] = useState<string | null | undefined>(row.movementColor ?? null);
     const [rangeColor, setRangeColor] = useState<string | null | undefined>(row.rangeColor ?? null);
+    const [moveWeight, setMoveWeight] = useState<number>(row.movementWeight ?? 10);
+    const [movePattern, setMovePattern] = useState<"solid" | "dash">(row.movementPattern ?? "dash");
+    const [moveOpacity, setMoveOpacity] = useState<number>(row.movementOpacity ?? 1);
+    const [rangeWeight, setRangeWeight] = useState<number>(row.rangeWeight ?? 10);
+    const [rangePattern, setRangePattern] = useState<"solid" | "dash">(row.rangePattern ?? "dash");
+    const [rangeOpacity, setRangeOpacity] = useState<number>(row.rangeOpacity ?? 1);
 
 
     const [dmPreview, setDmPreview] = useState(false);
@@ -136,6 +142,12 @@ export default function InitiativeRow({
         setPlayerCharacter(!!row.playerCharacter); // NEW
         setMovementColor(row.movementColor ?? null);
         setRangeColor(row.rangeColor ?? null);
+        setMoveWeight(row.movementWeight ?? 10);
+        setMovePattern(row.movementPattern ?? "dash");
+        setMoveOpacity(row.movementOpacity ?? 1);
+        setRangeWeight(row.rangeWeight ?? 10);
+        setRangePattern(row.rangePattern ?? "dash");
+        setRangeOpacity(row.rangeOpacity ?? 1);
     }, [
         row.id,
         row.initiative,
@@ -147,7 +159,13 @@ export default function InitiativeRow({
         row.attackRange,
         row.playerCharacter,
         row.movementColor,
-        row.rangeColor
+        row.rangeColor,
+        row.movementWeight,
+        row.movementPattern,
+        row.movementOpacity,
+        row.rangeWeight,
+        row.rangePattern,
+        row.rangeOpacity
     ]);
 
     // Style helpers
@@ -241,10 +259,36 @@ export default function InitiativeRow({
             visible: false,   // DM-only
             variant: "dm",
             movementColor,
-            rangeColor,
-            forceRecenter: activeChanged
+            movementWeight: moveWeight,
+            movementPattern: movePattern,
+            movementOpacity: moveOpacity,
+            forceRecenter: activeChanged,
+            only: "move"
         }).catch(console.error);
-    }, [dmPreview, movement, attackRange, movementColor, rangeColor, row.id, row.active]);
+    }, [dmPreview, movement, movementColor, moveWeight, movePattern, moveOpacity, row.id, row.active]);
+
+    useEffect(() => {
+        const activeChanged = row.active !== prevActiveRef.current;
+        prevActiveRef.current = row.active;
+
+        if (!dmPreview) return;
+        console.log("calling ensure rings on row active")
+        ensureRings({
+            tokenId: row.id,
+            movement,
+            attackRange,
+            moveAttached: false,
+            rangeAttached: true,
+            visible: false,   // DM-only
+            variant: "dm",
+            rangeColor,
+            rangeWeight,
+            rangePattern,
+            rangeOpacity,
+            forceRecenter: activeChanged,
+            only: "range"
+        }).catch(console.error);
+    }, [dmPreview, attackRange, rangeColor, rangeWeight, rangePattern, rangeOpacity, row.id, row.active]);
 
     useEffect(() => () => { clearRingsFor(row.id, "dm").catch(() => { }); }, [row.id]);
 
@@ -259,8 +303,13 @@ export default function InitiativeRow({
                 rangeAttached: true,
                 visible: false,
                 variant: "dm",
-                movementColor,
-                rangeColor,
+                movementColor, rangeColor,
+                movementWeight: row.movementWeight ?? 10,
+                rangeWeight: row.rangeWeight ?? 10,
+                movementPattern: row.movementPattern ?? "dash",
+                rangePattern: row.rangePattern ?? "dash",
+                movementOpacity: row.movementOpacity ?? 1,
+                rangeOpacity: row.rangeOpacity ?? 1,
             });
             setDmPreview(true);
         } else {
@@ -640,16 +689,46 @@ export default function InitiativeRow({
                                             <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                                                 <Typography sx={{ fontSize: "0.75rem" }}>Move</Typography>
                                                 <CommitNumberField
-                                                    size="small" variant="outlined" value={movement}
-                                                    onCommit={(v) => { setMovement(v); bubble?.({ movement: v }); }}
-                                                    sx={{ "& .MuiOutlinedInput-root": { borderRadius: 0.5, fontSize: "0.75rem", height: 24, p: 0 } }}
-                                                    slotProps={{ htmlInput: { inputMode: "numeric", pattern: "[0-9]*", "aria-label": "movement", style: { textAlign: "center", padding: "0 2px", width: 40, fontSize: "0.75rem" } } }}
+                                                    size="small"
+                                                    variant="outlined"
+                                                    value={movement}
+                                                    onCommit={(v) => {
+                                                        setMovement(v);
+                                                        bubble?.({ movement: v });
+                                                    }}
+                                                    sx={{
+                                                        "& .MuiOutlinedInput-root": {
+                                                            borderRadius: 0.5,
+                                                            fontSize: "0.75rem",
+                                                            height: 24,
+                                                            p: 0,
+                                                        },
+                                                    }}
+                                                    slotProps={{
+                                                        htmlInput: {
+                                                            inputMode: "numeric",
+                                                            pattern: "[0-9]*",
+                                                            "aria-label": "movement",
+                                                            style: {
+                                                                textAlign: "center",
+                                                                padding: "0 2px",
+                                                                width: 40,
+                                                                fontSize: "0.75rem",
+                                                            },
+                                                        },
+                                                    }}
                                                 />
                                                 <Typography sx={{ fontSize: "0.65rem", color: "text.secondary" }}>ft</Typography>
-                                                {/* NEW color dot (nullable → default) */}
+                                                {/* NEW ColorPicker */}
                                                 <ColorPicker
                                                     value={movementColor ?? null}
-                                                    onChange={(hex) => { setMovementColor(hex); bubble?.({ movementColor: hex }); }}
+                                                    onChange={(hex) => { setMovementColor(hex); bubble({ movementColor: hex }); }}
+                                                    weight={moveWeight}
+                                                    onChangeWeight={(w) => { setMoveWeight(w); bubble({ movementWeight: w }); }}
+                                                    pattern={movePattern}
+                                                    onChangePattern={(p) => { setMovePattern(p); bubble({ movementPattern: p }); }}
+                                                    opacity={moveOpacity}
+                                                    onChangeOpacity={(o) => { setMoveOpacity(o); bubble({ movementOpacity: o }); }}
                                                 />
                                             </Box>
 
@@ -657,16 +736,46 @@ export default function InitiativeRow({
                                             <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                                                 <Typography sx={{ fontSize: "0.75rem" }}>Range</Typography>
                                                 <CommitNumberField
-                                                    size="small" variant="outlined" value={attackRange}
-                                                    onCommit={(v) => { setAttackRange(v); bubble?.({ attackRange: v }); }}
-                                                    sx={{ "& .MuiOutlinedInput-root": { borderRadius: 0.5, fontSize: "0.75rem", height: 24, p: 0 } }}
-                                                    slotProps={{ htmlInput: { inputMode: "numeric", pattern: "[0-9]*", "aria-label": "attack range", style: { textAlign: "center", padding: "0 2px", width: 40, fontSize: "0.75rem" } } }}
+                                                    size="small"
+                                                    variant="outlined"
+                                                    value={attackRange}
+                                                    onCommit={(v) => {
+                                                        setAttackRange(v);
+                                                        bubble?.({ attackRange: v });
+                                                    }}
+                                                    sx={{
+                                                        "& .MuiOutlinedInput-root": {
+                                                            borderRadius: 0.5,
+                                                            fontSize: "0.75rem",
+                                                            height: 24,
+                                                            p: 0,
+                                                        },
+                                                    }}
+                                                    slotProps={{
+                                                        htmlInput: {
+                                                            inputMode: "numeric",
+                                                            pattern: "[0-9]*",
+                                                            "aria-label": "movement",
+                                                            style: {
+                                                                textAlign: "center",
+                                                                padding: "0 2px",
+                                                                width: 40,
+                                                                fontSize: "0.75rem",
+                                                            },
+                                                        },
+                                                    }}
                                                 />
                                                 <Typography sx={{ fontSize: "0.65rem", color: "text.secondary" }}>ft</Typography>
-                                                {/* NEW color dot (nullable → default) */}
+                                                {/* NEW ColorPicker */}
                                                 <ColorPicker
                                                     value={rangeColor ?? null}
-                                                    onChange={(hex) => { setRangeColor(hex); bubble?.({ rangeColor: hex }); }}
+                                                    onChange={(hex) => { setRangeColor(hex); bubble({ rangeColor: hex }); }}
+                                                    weight={rangeWeight}
+                                                    onChangeWeight={(w) => { setRangeWeight(w); bubble({ rangeWeight: w }); }}
+                                                    pattern={rangePattern}
+                                                    onChangePattern={(p) => { setRangePattern(p); bubble({ rangePattern: p }); }}
+                                                    opacity={rangeOpacity}
+                                                    onChangeOpacity={(o) => { setRangeOpacity(o); bubble({ rangeOpacity: o }); }}
                                                 />
                                             </Box>
                                         </Stack>

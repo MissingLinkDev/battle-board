@@ -62,9 +62,19 @@ export function registerInitiativeContextMenu() {
                                 conditions: [],
 
                                 movement: 30,
-                                attackRange: 0,  // default 0 so range ring won’t draw
+                                attackRange: 60,
 
                                 playerCharacter: false,
+                                movementColor: "#519e00", // DEFAULT_MOVE_COLOR
+                                rangeColor: "#fe4c50",    // DEFAULT_RANGE_COLOR
+                                movementWeight: 12,    // e.g. 4..16
+                                rangeWeight: 12,
+
+                                movementPattern: "dash",
+                                rangePattern: "dash",
+
+                                movementOpacity: 1,   // 0..1
+                                rangeOpacity: 1,
                             } as MetaShape;
                         } else {
                             delete (it.metadata as any)[META_KEY];

@@ -12,6 +12,15 @@ export type InitiativeItem = {
     movement: number;
     attackRange: number;
     playerCharacter: boolean;
-    movementColor?: string | null;  // NEW
-    rangeColor?: string | null;     // NEW
+    movementColor?: string | null;
+    rangeColor?: string | null;
+    // NEW ring styling
+    movementWeight?: number | null;    // e.g. 4..16
+    rangeWeight?: number | null;
+
+    movementPattern?: "solid" | "dash" | null;
+    rangePattern?: "solid" | "dash" | null;
+
+    movementOpacity?: number | null;   // 0..1
+    rangeOpacity?: number | null;
 };

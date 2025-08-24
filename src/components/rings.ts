@@ -3,14 +3,16 @@ import OBR, { buildShape, type Item, type Shape, type Vector2, isImage } from "@
 import { getPluginId } from "../getPluginId";
 
 const RING_META = getPluginId("rings");
-const MOVEMENT_COLOR = "#28a745";
-const RANGE_COLOR = "#dc3545";
-const DASH = [10, 20];
-const STROKE_W = 10 as const;
+
+const DEFAULT_MOVE_COLOR = "#519e00";
+const DEFAULT_RANGE_COLOR = "#fe4c50";
+const DEFAULT_WEIGHT = 12;
+const DEFAULT_PATTERN: "solid" | "dash" | "dot" = "dash";
+const DEFAULT_OPACITY = 1;
 
 type RingVariant = "normal" | "dm";
-
 type RingKind = "move" | "range";
+
 type RingMeta = {
     ownerId: string; // token id
     kind: RingKind;
@@ -19,7 +21,26 @@ type RingMeta = {
     [k: string]: unknown;
 };
 
+function dashFor(
+    pattern: "solid" | "dash" | "dot" | undefined | null,
+    width: number
+): number[] | undefined {
+    if (!pattern || pattern === "solid") return undefined;
+
+    const w = Math.max(1, Math.round(width));
+    if (pattern === "dash") {
+        const dash = Math.max(1, Math.round(1.2 * w));
+        const gap = Math.max(1, Math.round(4.0 * w));
+        return [dash, gap];
+    }
+    // "dot": very short dash with a moderate gap
+    const dot = Math.max(1, Math.round(0.6 * w));
+    const gap = Math.max(1, Math.round(1.6 * w));
+    return [dot, gap];
+}
+
 const isShapeItem = (it: Item): it is Shape => it.type === "SHAPE";
+
 const isOurRing = (it: Item, ownerId?: string, variant?: RingVariant): it is Shape => {
     if (!isShapeItem(it)) return false;
     const m = it.metadata as any;
@@ -41,7 +62,7 @@ export async function clearRingsFor(tokenId: string, variant?: RingVariant) {
 
 /** Convert a distance in grid units (e.g., feet) to pixels based on the scene grid. */
 async function unitsToPixels(units: number): Promise<number> {
-    const [dpi, scale] = await Promise.all([OBR.scene.grid.getDpi(), OBR.scene.grid.getScale()]);
+    const [dpi, scale] = await Promise.all([OBR.scene.grid.getDpi(), OBR.scene.grid.getScale(),]);
     const perCellUnits = scale.parsed?.multiplier ?? 5;
     return (units / perCellUnits) * dpi;
 }
@@ -62,30 +83,30 @@ function buildCircle(opts: {
     attached: boolean;
     visible: boolean;
     variant: RingVariant;
+    strokeWidth: number;
+    strokeDash?: number[];
+    strokeOpacity: number;
 }) {
-    const { tokenId, center, diameterPx, color, kind, attached, visible, variant } = opts;
+    const { tokenId, center, diameterPx, color, kind, attached, visible, variant, strokeWidth, strokeDash, strokeOpacity } = opts;
 
     const builder = buildShape()
         .shapeType("CIRCLE")
         .width(diameterPx)
         .height(diameterPx)
-        .position(center) // place at center
+        .position(center)
         .fillOpacity(0)
         .strokeColor(color)
-        .strokeOpacity(1)
-        .strokeWidth(STROKE_W)
-        .strokeDash(DASH)
+        .strokeOpacity(strokeOpacity)
+        .strokeWidth(strokeWidth)
         .locked(true)
         .disableHit(false)
         .visible(visible)
         .metadata(ringMeta(tokenId, kind, variant));
 
-    if (attached) {
-        builder.layer("ATTACHMENT").attachedTo(tokenId);
-    } else {
-        // Unattached ring sits in DRAWING layer so it doesn't follow the token
-        builder.layer("ATTACHMENT");
-    }
+    if (strokeDash && strokeDash.length) builder.strokeDash(strokeDash);
+
+    if (attached) builder.layer("DRAWING").attachedTo(tokenId);
+    else builder.layer("DRAWING");
 
     return builder.build();
 }
@@ -138,7 +159,14 @@ export async function ensureRings(params: {
     variant?: RingVariant;
     movementColor?: string | null;
     rangeColor?: string | null;
+    movementWeight?: number | null;
+    rangeWeight?: number | null;
+    movementPattern?: "solid" | "dash" | "dot" | null;
+    rangePattern?: "solid" | "dash" | "dot" | null;
+    movementOpacity?: number | null;  // 0..1
+    rangeOpacity?: number | null;
     forceRecenter?: boolean;
+    only?: "move" | "range";
 }) {
     const {
         tokenId,
@@ -150,12 +178,25 @@ export async function ensureRings(params: {
         variant = "normal",
         movementColor = null,
         rangeColor = null,
+        movementWeight,
+        rangeWeight,
+        movementPattern,
+        rangePattern,
+        movementOpacity,
+        rangeOpacity,
         forceRecenter = false,
+        only,
     } = params;
 
-    const moveStroke = movementColor ?? MOVEMENT_COLOR;
-    const rangeStroke = rangeColor ?? RANGE_COLOR;
-    // Get the token (for initial placement center)
+    const moveStroke = movementColor ?? DEFAULT_MOVE_COLOR;
+    const rangeStroke = rangeColor ?? DEFAULT_RANGE_COLOR;
+    const moveWeight = Math.max(1, movementWeight ?? DEFAULT_WEIGHT);
+    const rangeWeight2 = Math.max(1, rangeWeight ?? DEFAULT_WEIGHT);
+    const moveDash = dashFor(movementPattern ?? DEFAULT_PATTERN, moveWeight);
+    const rangeDash = dashFor(rangePattern ?? DEFAULT_PATTERN, rangeWeight2);
+    const moveOpacity = Math.max(0, Math.min(1, movementOpacity ?? DEFAULT_OPACITY));
+    const rangeOpacity2 = Math.max(0, Math.min(1, rangeOpacity ?? DEFAULT_OPACITY));
+
     const [token] = await OBR.scene.items.getItems((it) => it.id === tokenId);
     if (!token) return;
     const center = token.position;
@@ -179,129 +220,176 @@ export async function ensureRings(params: {
         layer?: string;
         attachedTo?: string | null;
         visible?: boolean;
-        colorChanged?: boolean;
+        strokeColor?: string;
+        strokeWidth?: number;
+        strokeOpacity?: number;
     }[] = [];
     const toDelete: string[] = [];
 
     // Helper to see if an existing ring matches attachment mode
     const hasAttachment = (r: Shape) => r.layer === "ATTACHMENT" && (r as any).attachedTo === tokenId;
 
+    // Helpers to read current style from existing shapes (works across SDK versions)
+    const readStrokeColor = (s: Shape): string | undefined =>
+        ((s as any).style?.strokeColor ?? (s as any).strokeColor) as string | undefined;
+    const readStrokeWidth = (s: Shape): number | undefined =>
+        ((s as any).style?.strokeWidth ?? (s as any).strokeWidth) as number | undefined;
+    const readStrokeOpacity = (s: Shape): number | undefined =>
+        ((s as any).style?.strokeOpacity ?? (s as any).strokeOpacity) as number | undefined;
+    const readStrokeDash = (s: Shape): number[] | undefined =>
+        ((s as any).style?.strokeDash ?? (s as any).strokeDash) as number[] | undefined;
+
     // MOVE RING (default: unattached)
-    if (wantMove > 0) {
-        if (existingMove) {
-            const wrongAttachment =
-                moveAttached ? !hasAttachment(existingMove) : hasAttachment(existingMove);
-            if (wrongAttachment) {
-                // Easier: recreate with correct attachment behavior
-                toDelete.push(existingMove.id);
+    if (!only || only === "move") {
+        if (wantMove > 0) {
+            if (existingMove) {
+                const wrongAttachment =
+                    moveAttached ? !hasAttachment(existingMove) : hasAttachment(existingMove);
+                const existingDash = readStrokeDash(existingMove) ?? [];
+                const dashMismatch =
+                    JSON.stringify(existingDash) !== JSON.stringify(moveDash ?? []);
+
+                if (wrongAttachment || dashMismatch) {
+                    // Recreate for attachment or dash changes
+                    toDelete.push(existingMove.id);
+                    toAdd.push(
+                        buildCircle({
+                            tokenId,
+                            center,
+                            diameterPx: wantMove,
+                            color: moveStroke,
+                            kind: "move",
+                            attached: moveAttached,
+                            visible,
+                            variant,
+                            strokeWidth: moveWeight,
+                            strokeDash: moveDash,
+                            strokeOpacity: moveOpacity,
+                        })
+                    );
+                } else {
+                    const needsSize =
+                        existingMove.width !== wantMove || existingMove.height !== wantMove;
+
+                    // track token position only when attached OR if forceRecenter is requested
+                    const needsPos =
+                        (moveAttached || forceRecenter) &&
+                        (existingMove.position.x !== center.x ||
+                            existingMove.position.y !== center.y);
+
+                    const needsVis = existingMove.visible !== visible;
+                    const needsColor = readStrokeColor(existingMove) !== moveStroke;
+                    const needsWeight = readStrokeWidth(existingMove) !== moveWeight;
+                    const needsOpacity = readStrokeOpacity(existingMove) !== moveOpacity;
+
+                    if (needsSize || needsPos || needsVis || needsColor || needsWeight || needsOpacity) {
+                        toUpdate.push({
+                            id: existingMove.id,
+                            ...(needsSize ? { width: wantMove, height: wantMove } : {}),
+                            ...(needsPos ? { position: center } : {}),
+                            ...(needsVis ? { visible } : {}),
+                            ...(needsColor ? { strokeColor: moveStroke } : {}),
+                            ...(needsWeight ? { strokeWidth: moveWeight } : {}),
+                            ...(needsOpacity ? { strokeOpacity: moveOpacity } : {}),
+                        });
+                    }
+                }
+            } else {
                 toAdd.push(
                     buildCircle({
                         tokenId,
                         center,
                         diameterPx: wantMove,
-                        color: moveStroke ?? MOVEMENT_COLOR,
+                        color: moveStroke,
                         kind: "move",
                         attached: moveAttached,
                         visible,
                         variant,
+                        strokeWidth: moveWeight,
+                        strokeDash: moveDash,
+                        strokeOpacity: moveOpacity,
                     })
                 );
-            } else {
-                const needsSize =
-                    existingMove.width !== wantMove || existingMove.height !== wantMove;
-                // Only attached rings should track the token's position
-                const needsPos =
-                    (moveAttached || forceRecenter) &&
-                    (existingMove.position.x !== center.x || existingMove.position.y !== center.y);
-
-                const needsVis = existingMove.visible !== visible;
-                const needsColor =
-                    ((existingMove as any).style?.strokeColor ?? (existingMove as any).strokeColor) !== moveStroke;
-
-                if (needsSize || needsPos || needsVis || needsColor) {
-                    toUpdate.push({
-                        id: existingMove.id,
-                        ...(needsSize ? { width: wantMove, height: wantMove } : {}),
-                        ...(needsPos ? { position: center } : {}),
-                        ...(needsVis ? { visible } : {}),
-                        ...(needsColor ? { colorChanged: true } : {}),
-                    });
-                }
             }
-        } else {
-            toAdd.push(
-                buildCircle({
-                    tokenId,
-                    center,
-                    diameterPx: wantMove,
-                    color: moveStroke ?? MOVEMENT_COLOR,
-                    kind: "move",
-                    attached: moveAttached,
-                    visible,
-                    variant,
-                })
-            );
+        } else if (existingMove) {
+            toDelete.push(existingMove.id);
         }
-    } else if (existingMove) {
-        toDelete.push(existingMove.id);
     }
 
     // RANGE RING (default: attached)
-    if (wantRange > 0) {
-        if (existingRange) {
-            const wrongAttachment =
-                rangeAttached ? !hasAttachment(existingRange) : hasAttachment(existingRange);
-            if (wrongAttachment) {
-                toDelete.push(existingRange.id);
+    if (!only || only === "range") {
+        if (wantRange > 0) {
+            if (existingRange) {
+                const wrongAttachment =
+                    rangeAttached ? !hasAttachment(existingRange) : hasAttachment(existingRange);
+
+                const existingDash = readStrokeDash(existingRange) ?? [];
+                const dashMismatch =
+                    JSON.stringify(existingDash) !== JSON.stringify(rangeDash ?? []);
+
+                if (wrongAttachment || dashMismatch) {
+                    toDelete.push(existingRange.id);
+                    toAdd.push(
+                        buildCircle({
+                            tokenId,
+                            center,
+                            diameterPx: wantRange,
+                            color: rangeStroke,
+                            kind: "range",
+                            attached: rangeAttached,
+                            visible,
+                            variant,
+                            strokeWidth: rangeWeight2,
+                            strokeDash: rangeDash,
+                            strokeOpacity: rangeOpacity2,
+                        })
+                    );
+                } else {
+                    const needsSize =
+                        existingRange.width !== wantRange || existingRange.height !== wantRange;
+
+                    const needsPos =
+                        (rangeAttached || forceRecenter) &&
+                        (existingRange.position.x !== center.x ||
+                            existingRange.position.y !== center.y);
+
+                    const needsVis = existingRange.visible !== visible;
+                    const needsColor = readStrokeColor(existingRange) !== rangeStroke;
+                    const needsWeight = readStrokeWidth(existingRange) !== rangeWeight2;
+                    const needsOpacity = readStrokeOpacity(existingRange) !== rangeOpacity2;
+
+                    if (needsSize || needsPos || needsVis || needsColor || needsWeight || needsOpacity) {
+                        toUpdate.push({
+                            id: existingRange.id,
+                            ...(needsSize ? { width: wantRange, height: wantRange } : {}),
+                            ...(needsPos ? { position: center } : {}),
+                            ...(needsVis ? { visible } : {}),
+                            ...(needsColor ? { strokeColor: rangeStroke } : {}),
+                            ...(needsWeight ? { strokeWidth: rangeWeight2 } : {}),
+                            ...(needsOpacity ? { strokeOpacity: rangeOpacity2 } : {}),
+                        });
+                    }
+                }
+            } else {
                 toAdd.push(
                     buildCircle({
                         tokenId,
                         center,
                         diameterPx: wantRange,
-                        color: rangeStroke ?? RANGE_COLOR,
+                        color: rangeStroke,
                         kind: "range",
                         attached: rangeAttached,
                         visible,
                         variant,
+                        strokeWidth: rangeWeight2,
+                        strokeDash: rangeDash,
+                        strokeOpacity: rangeOpacity2,
                     })
                 );
-            } else {
-                const needsSize =
-                    existingRange.width !== wantRange || existingRange.height !== wantRange;
-                const needsPos =
-                    rangeAttached &&
-                    (existingRange.position.x !== center.x || existingRange.position.y !== center.y);
-
-                const needsVisR = existingRange.visible !== visible;
-                const needsColor =
-                    ((existingRange as any).style?.strokeColor ?? (existingRange as any).strokeColor) !== rangeStroke;
-
-                if (needsSize || needsPos || needsVisR || needsColor) {
-                    toUpdate.push({
-                        id: existingRange.id,
-                        ...(needsSize ? { width: wantRange, height: wantRange } : {}),
-                        ...(needsPos ? { position: center } : {}),
-                        ...(needsVisR ? { visible } : {}),
-                        ...(needsColor ? { colorChanged: true } : {}),
-                    });
-                }
             }
-        } else {
-            toAdd.push(
-                buildCircle({
-                    tokenId,
-                    center,
-                    diameterPx: wantRange,
-                    color: rangeStroke ?? RANGE_COLOR,
-                    kind: "range",
-                    attached: rangeAttached,
-                    visible,
-                    variant,
-                })
-            );
+        } else if (existingRange) {
+            toDelete.push(existingRange.id);
         }
-    } else if (existingRange) {
-        toDelete.push(existingRange.id);
     }
 
     if (toDelete.length) await OBR.scene.items.deleteItems(toDelete);
@@ -313,13 +401,20 @@ export async function ensureRings(params: {
                 for (const it of items) {
                     if (!isShapeItem(it)) continue;
                     const upd = toUpdate.find((u) => u.id === it.id)!;
+
                     if (upd.width !== undefined) it.width = upd.width;
                     if (upd.height !== undefined) it.height = upd.height;
                     if (upd.position) it.position = upd.position;
-                    if (upd.visible !== undefined) it.visible = upd.visible;      // keep it as a native prop
-                    if (upd.colorChanged) {
-                        const s = (it as any).style ?? {};
-                        (it as any).style = { ...s, strokeColor: (it.metadata as any).kind === "move" ? moveStroke : rangeStroke };
+                    if (upd.visible !== undefined) it.visible = upd.visible; // keep it as a native prop
+
+                    if (upd.strokeColor !== undefined || upd.strokeWidth !== undefined || upd.strokeOpacity !== undefined) {
+                        const s = ((it as any).style ?? {}) as any;
+                        (it as any).style = {
+                            ...s,
+                            ...(upd.strokeColor !== undefined ? { strokeColor: upd.strokeColor } : {}),
+                            ...(upd.strokeWidth !== undefined ? { strokeWidth: upd.strokeWidth } : {}),
+                            ...(upd.strokeOpacity !== undefined ? { strokeOpacity: upd.strokeOpacity } : {}),
+                        };
                     }
                 }
             }

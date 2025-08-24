@@ -64,6 +64,12 @@ function toRow(item: Item, meta: any): InitiativeItem {
         playerCharacter: meta?.playerCharacter,
         movementColor: meta.movementColor ?? null,
         rangeColor: meta.rangeColor ?? null,
+        movementWeight: meta.movementWeight ?? null,
+        rangeWeight: meta.rangeWeight ?? null,
+        movementPattern: meta.movementPattern ?? null,
+        rangePattern: meta.rangePattern ?? null,
+        movementOpacity: meta.movementOpacity ?? null,
+        rangeOpacity: meta.rangeOpacity ?? null,
     };
 }
 
@@ -239,6 +245,12 @@ export function InitiativeTracker() {
             playerCharacter: boolean;
             movementColor: string | null;
             rangeColor: string | null;
+            movementWeight: number | null;
+            rangeWeight: number | null;
+            movementPattern: "solid" | "dash" | "dot" | null;
+            rangePattern: "solid" | "dash" | "dot" | null;
+            movementOpacity: number | null;
+            rangeOpacity: number | null;
         }>;
 
         const patches: { id: string; patch: Patch }[] = [];
@@ -270,6 +282,12 @@ export function InitiativeTracker() {
             }
             if (now.movementColor !== before.movementColor) patch.movementColor = now.movementColor; // NEW
             if (now.rangeColor !== before.rangeColor) patch.rangeColor = now.rangeColor;
+            if (now.movementWeight !== before.movementWeight) patch.movementWeight = now.movementWeight ?? null;
+            if (now.rangeWeight !== before.rangeWeight) patch.rangeWeight = now.rangeWeight ?? null;
+            if (now.movementPattern !== before.movementPattern) patch.movementPattern = now.movementPattern ?? null;
+            if (now.rangePattern !== before.rangePattern) patch.rangePattern = now.rangePattern ?? null;
+            if (now.movementOpacity !== before.movementOpacity) patch.movementOpacity = now.movementOpacity ?? null;
+            if (now.rangeOpacity !== before.rangeOpacity) patch.rangeOpacity = now.rangeOpacity ?? null;
 
 
             if (Object.keys(patch).length) patches.push({ id: now.id, patch });
@@ -342,6 +360,12 @@ export function InitiativeTracker() {
                 rangeAttached: true,
                 movementColor: active.movementColor ?? null,
                 rangeColor: active.rangeColor ?? null,
+                movementWeight: active.movementWeight ?? 10,
+                rangeWeight: active.rangeWeight ?? 10,
+                movementPattern: active.movementPattern ?? "dash",
+                rangePattern: active.rangePattern ?? "dash",
+                movementOpacity: active.movementOpacity ?? 1,
+                rangeOpacity: active.rangeOpacity ?? 1,
             }).catch(console.error);
 
             prevActiveId.current = active.id;
@@ -355,7 +379,12 @@ export function InitiativeTracker() {
                 rafIdRef.current = null;
             }
         };
-    }, [started, active?.id, active?.movement, active?.attackRange, active?.playerCharacter, settings.showRangeRings, active?.movementColor, active?.rangeColor,]);
+    }, [
+        started, active?.id, active?.movement,
+        active?.attackRange, active?.playerCharacter, settings.showRangeRings,
+        active?.movementColor, active?.rangeColor, active?.movementWeight,
+        active?.rangeWeight, active?.movementPattern, active?.rangePattern,
+        active?.movementOpacity, active?.rangeOpacity,]);
 
     // Turn controls
     const handleStart = async () => {
@@ -486,14 +515,27 @@ export function InitiativeTracker() {
                     name: displayName,
                     active: false,
                     visible: it.visible,
+
                     ac: 10,
                     currentHP: 10,
                     maxHP: 10,
                     tempHP: 0,
                     conditions: [],
+
                     movement: 30,
-                    attackRange: 0, // default 0 so range ring won’t draw
+                    attackRange: 60,
+
                     playerCharacter: false,
+                    movementColor: "#519e00", // DEFAULT_MOVE_COLOR
+                    rangeColor: "#fe4c50",    // DEFAULT_RANGE_COLOR
+                    movementWeight: 12,    // e.g. 4..16
+                    rangeWeight: 12,
+
+                    movementPattern: "dash",
+                    rangePattern: "dash",
+
+                    movementOpacity: 1,   // 0..1
+                    rangeOpacity: 1,
                 } as MetaShape;
             }
         });
