@@ -81,10 +81,10 @@ function buildCircle(opts: {
         .metadata(ringMeta(tokenId, kind, variant));
 
     if (attached) {
-        builder.layer("DRAWING").attachedTo(tokenId);
+        builder.layer("ATTACHMENT").attachedTo(tokenId);
     } else {
         // Unattached ring sits in DRAWING layer so it doesn't follow the token
-        builder.layer("DRAWING");
+        builder.layer("ATTACHMENT");
     }
 
     return builder.build();
@@ -155,8 +155,10 @@ export async function ensureRings(params: {
     const rangeStroke = rangeColor ?? RANGE_COLOR;
     // Get the token (for initial placement center)
     const [token] = await OBR.scene.items.getItems((it) => it.id === tokenId);
+    console.log(token);
     if (!token) return;
     const center = token.position;
+    console.log(center)
 
     const tokenFeet = getTokenFeet(token);
 
@@ -182,7 +184,7 @@ export async function ensureRings(params: {
     const toDelete: string[] = [];
 
     // Helper to see if an existing ring matches attachment mode
-    const hasAttachment = (r: Shape) => r.layer === "DRAWING" && (r as any).attachedTo === tokenId;
+    const hasAttachment = (r: Shape) => r.layer === "ATTACHMENT" && (r as any).attachedTo === tokenId;
 
     // MOVE RING (default: unattached)
     if (wantMove > 0) {
@@ -209,7 +211,7 @@ export async function ensureRings(params: {
                     existingMove.width !== wantMove || existingMove.height !== wantMove;
                 // Only attached rings should track the token's position
                 const needsPos =
-                    moveAttached &&
+                    // moveAttached &&
                     (existingMove.position.x !== center.x || existingMove.position.y !== center.y);
 
                 const needsVis = existingMove.visible !== visible;

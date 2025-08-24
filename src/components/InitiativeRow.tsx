@@ -227,6 +227,7 @@ export default function InitiativeRow({
 
     useEffect(() => {
         if (!dmPreview) return;
+        console.log("calling ensure rings on row active")
         ensureRings({
             tokenId: row.id,
             movement,
@@ -238,7 +239,7 @@ export default function InitiativeRow({
             movementColor,
             rangeColor,
         }).catch(console.error);
-    }, [dmPreview, movement, attackRange, movementColor, rangeColor, row.id]);
+    }, [dmPreview, movement, attackRange, movementColor, rangeColor, row.id, row.active]);
 
     useEffect(() => () => { clearRingsFor(row.id, "dm").catch(() => { }); }, [row.id]);
 

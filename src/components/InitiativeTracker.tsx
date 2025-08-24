@@ -343,6 +343,7 @@ export function InitiativeTracker() {
                 movementColor: active.movementColor ?? null,
                 rangeColor: active.rangeColor ?? null,
             }).catch(console.error);
+
             prevActiveId.current = active.id;
             rafIdRef.current = null;
         });
@@ -528,8 +529,8 @@ export function InitiativeTracker() {
                         minHeight: 166,
                         borderRadius: 0,
                         overflow: "auto",
-                        display: "flex",          // 👈 make it a flex container
-                        flexDirection: "column",  // 👈 stack table + empty/spacer vertically
+                        display: "flex",
+                        flexDirection: "column",
                     }}
                 >
                     <Table
