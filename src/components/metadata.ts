@@ -20,8 +20,9 @@ export type MetaShape = {
     movement: number;     // e.g., feet per round
     attackRange: number;  // e.g., feet
 
-    // table extras (optional)
-    elevation: number;
+    // isPlayerCharacter
+    playerCharacter: boolean;
+
 };
 
 export function isPlainObject(v: unknown): v is Record<string, unknown> {

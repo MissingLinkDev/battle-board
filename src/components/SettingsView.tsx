@@ -9,18 +9,26 @@ import FormGroup from "@mui/material/FormGroup";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Switch from "@mui/material/Switch";
 import Paper from "@mui/material/Paper";
+import DeleteForeverRounded from "@mui/icons-material/DeleteForever";
 import OBR from "@owlbear-rodeo/sdk";
 
 import type { InitiativeSettings } from "./SceneState";
+import { META_KEY, isMetadata } from "./metadata";
+import { ensureRings, clearRings } from "./rings";
+import Button from "@mui/material/Button";
+import type { InitiativeItem } from "./InitiativeItem";
 
 type Props = {
     value: InitiativeSettings;
     onChange: (next: InitiativeSettings) => void;
     onBack: () => void;
+    rows?: InitiativeItem[];
 };
 
-export default function SettingsView({ value, onChange, onBack }: Props) {
+export default function SettingsView({ value, onChange, onBack, rows }: Props) {
     const rootRef = useRef<HTMLDivElement | null>(null);
+
+    const hasInitiative = (rows?.length ?? 0) > 0;
 
     const set = (patch: Partial<InitiativeSettings>) =>
         onChange({ ...value, ...patch });
@@ -36,6 +44,7 @@ export default function SettingsView({ value, onChange, onBack }: Props) {
                     ["Attack Range", "showAttackRange"],
                     ["Conditions", "showConditions"],
                     ["Distances", "showDistances"],
+                    ["DM Distance Rings Toggle", "dmRingToggle"],
                 ] as const,
             },
             {
@@ -43,7 +52,7 @@ export default function SettingsView({ value, onChange, onBack }: Props) {
                 options: [
                     ["Disable Player Initiative List", "disablePlayerList"],
                     ["Display Player Health Status", "displayPlayerHealthStatus"],
-                    ["Show Range Rings", "showRangeRings"],
+                    ["Show Range Rings for Player Characters", "showRangeRings"],
                 ] as const,
             },
         ],
@@ -68,6 +77,72 @@ export default function SettingsView({ value, onChange, onBack }: Props) {
             ro.disconnect();
         };
     }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const refreshRingsFromSettings = async () => {
+            try {
+                // If rings are globally hidden or neither type is enabled → nuke any shown rings
+                if (!value.showRangeRings || (!value.showMovementRange && !value.showAttackRange)) {
+                    await clearRings();
+                    return;
+                }
+
+                // Find the currently active creature
+                const items = await OBR.scene.items.getItems();
+                if (cancelled) return;
+
+                const active = items.find((it: any) => {
+                    const meta = (it.metadata as any)?.[META_KEY];
+                    return isMetadata?.(meta) && meta.active === true;
+                });
+
+                // No active → just clear (prevents stale rings hanging around)
+                if (!active) {
+                    await clearRings();
+                    return;
+                }
+
+                const meta = (active.metadata as any)[META_KEY] as {
+                    movement?: number;
+                    attackRange?: number;
+                };
+
+                // Only pass through the ring types that are enabled
+                await ensureRings({
+                    tokenId: active.id,
+                    movement: value.showMovementRange ? (meta.movement ?? 0) : 0,
+                    attackRange: value.showAttackRange ? (meta.attackRange ?? 0) : 0,
+                });
+            } catch (err) {
+                console.error("Failed to refresh rings from settings:", err);
+            }
+        };
+
+        // Run whenever any of the three switches change
+        refreshRingsFromSettings();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [value.showMovementRange, value.showAttackRange, value.showRangeRings]);
+
+    const handleClearAll = async () => {
+        try {
+            const items = await OBR.scene.items.getItems();
+            const ids = items.map((it) => it.id);
+            await OBR.scene.items.updateItems(ids, (items) => {
+                for (const it of items) {
+                    if ((it.metadata as any)[META_KEY]) {
+                        delete (it.metadata as any)[META_KEY];
+                    }
+                }
+            });
+        } catch (err) {
+            console.error("Failed to clear initiative list:", err);
+        }
+    };
 
     return (
         <Paper ref={rootRef} sx={{ borderRadius: 0 }}>
@@ -118,6 +193,18 @@ export default function SettingsView({ value, onChange, onBack }: Props) {
                         </Box>
                     ))}
                 </Stack>
+            </Box>
+            <Divider sx={{ my: 2 }} />
+            <Box sx={{ textAlign: "center", p: 2 }}>
+                <Button
+                    variant="contained"
+                    color="error"
+                    startIcon={<DeleteForeverRounded />}
+                    onClick={handleClearAll}
+                    disabled={!hasInitiative}
+                >
+                    Clear All from Initiative
+                </Button>
             </Box>
         </Paper>
     );

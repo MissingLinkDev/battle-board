@@ -63,6 +63,7 @@ function toRow(item: Item, meta: any): InitiativeItem {
         conditions: meta?.conditions,
         movement: meta?.movement,
         attackRange: meta?.attackRange,
+        playerCharacter: meta?.playerCharacter,
     };
 }
 
@@ -92,6 +93,7 @@ export function InitiativeTracker() {
     // Column visibility (NEW)
     const showAC = settings.showArmor;
     const showHP = settings.showHP;
+    const showDMR = settings.dmRingToggle;
     //Get all tokens
     const cmTokens = useCMTokens();
 
@@ -235,7 +237,7 @@ export function InitiativeTracker() {
             attackRange: number;
             active: boolean;
             visible: boolean;
-            elevation: number;
+            playerCharacter: boolean;
         }>;
 
         const patches: { id: string; patch: Patch }[] = [];
@@ -261,6 +263,9 @@ export function InitiativeTracker() {
             if (now.visible !== before.visible) patch.visible = now.visible;
             if (JSON.stringify(now.conditions) !== JSON.stringify(before.conditions)) {
                 patch.conditions = now.conditions;
+            }
+            if (now.playerCharacter !== before.playerCharacter) {
+                patch.playerCharacter = now.playerCharacter; // NEW
             }
 
             if (Object.keys(patch).length) patches.push({ id: now.id, patch });
@@ -294,7 +299,7 @@ export function InitiativeTracker() {
     useEffect(() => {
         if (!settings.showRangeRings) {
             // If disabled, always clear rings
-            clearRings().catch(console.error);
+            clearRings("normal").catch(console.error);
             return;
         }
         // cancel any scheduled work from a previous run
@@ -306,14 +311,21 @@ export function InitiativeTracker() {
         // sync path only; no async/await here
         if (!started || !active) {
             // end combat or no active → wipe any rings
-            clearRings().catch(console.error);
+            clearRings("normal").catch(console.error);
+            prevActiveId.current = null;
+            return;
+        }
+
+        // NEW: only show rings for Player Characters
+        if (!active.playerCharacter) {
+            clearRings("normal").catch(console.error);
             prevActiveId.current = null;
             return;
         }
 
         // if the active token changed, remove old rings first
         if (prevActiveId.current && prevActiveId.current !== active.id) {
-            clearRings().catch(console.error);
+            clearRings("normal").catch(console.error);
         }
 
         // schedule the async ensure call without making the effect async
@@ -336,7 +348,7 @@ export function InitiativeTracker() {
                 rafIdRef.current = null;
             }
         };
-    }, [started, active?.id, active?.movement, active?.attackRange]);
+    }, [started, active?.id, active?.movement, active?.attackRange, active?.playerCharacter, settings.showRangeRings]);
 
     // Turn controls
     const handleStart = async () => {
@@ -371,7 +383,7 @@ export function InitiativeTracker() {
         setOnlyExpanded(null);
         setRound(0);
         setStarted(false);
-        await clearRings();
+        await clearRings("normal");
 
         // persist to scene
         await saveSceneState({ started: false, round: 0 });
@@ -452,24 +464,12 @@ export function InitiativeTracker() {
         }
     };
 
-    if (view === "settings") {
-        // Settings screen
-        return (
-            <SettingsView
-                value={settings}
-                onChange={async (next) => {
-                    setSettings(next);
-                    await saveSceneState({ settings: next });
-                }}
-                onBack={() => setView("tracker")}
-            />
-        );
-    }
-
-    const handleAddAll = async () => {
+    const handleAddAll = async (addHidden: boolean = true) => {
         // rows = current initiative rows; skip anything already added
         const existingIds = new Set(rows.map((r) => r.id));
-        const idsToAdd = cmTokens.filter((t) => !existingIds.has(t.id)).map((t) => t.id);
+        const idsToAdd = cmTokens
+            .filter((t) => !existingIds.has(t.id) && (addHidden || t.visible !== false))
+            .map((t) => t.id);
 
         if (idsToAdd.length === 0) return;
 
@@ -487,17 +487,14 @@ export function InitiativeTracker() {
                     name: displayName,
                     active: false,
                     visible: it.visible,
-
                     ac: 10,
                     currentHP: 10,
                     maxHP: 10,
                     tempHP: 0,
                     conditions: [],
-
                     movement: 30,
                     attackRange: 0, // default 0 so range ring won’t draw
-
-                    elevation: 0,
+                    playerCharacter: false,
                 } as MetaShape;
             }
         });
@@ -505,6 +502,20 @@ export function InitiativeTracker() {
         // Your existing Scene→UI sync effect will pick up the change and populate rows
     };
 
+    if (view === "settings") {
+        // Settings screen
+        return (
+            <SettingsView
+                value={settings}
+                onChange={async (next) => {
+                    setSettings(next);
+                    await saveSceneState({ settings: next });
+                }}
+                onBack={() => setView("tracker")}
+                rows={sortedRows}
+            />
+        );
+    }
 
     return (
         <Box
@@ -542,7 +553,7 @@ export function InitiativeTracker() {
                                 {showAC && <TableCell width={36} align="center">AC</TableCell>}
                                 {showHP && <TableCell width={62} align="center">HP</TableCell>}
                                 {showHP && <TableCell width={36} align="center">TP</TableCell>}
-                                {showHP && <TableCell width={18}></TableCell>}
+                                {showDMR && <TableCell width={24}></TableCell>}
                             </TableRow>
                         </TableHead>
 
@@ -570,7 +581,9 @@ export function InitiativeTracker() {
                                         showDistances: settings.showDistances,
                                         showAC,
                                         showHP,
+                                        showDMR,
                                     }}
+                                    started={started}
                                 />
                             ))}
                         </TableBody>
@@ -594,9 +607,26 @@ export function InitiativeTracker() {
                                 <Typography variant="body2" sx={{ color: "text.secondary", mb: 1 }}>
                                     No creatures in initiative yet. Add a character to the Battle Board to get started.
                                 </Typography>
-                                <Button size="small" variant="outlined" onClick={handleAddAll} sx={{ borderRadius: 1 }}>
-                                    Add All in Scene
-                                </Button>
+
+                                <Stack direction="row" spacing={1} justifyContent="center">
+                                    <Button
+                                        size="small"
+                                        variant="outlined"
+                                        onClick={() => handleAddAll(true)}
+                                        sx={{ borderRadius: 1 }}
+                                    >
+                                        Add All in Scene
+                                    </Button>
+
+                                    <Button
+                                        size="small"
+                                        variant="outlined"
+                                        onClick={() => handleAddAll(false)}
+                                        sx={{ borderRadius: 1 }}
+                                    >
+                                        Add Visible Only
+                                    </Button>
+                                </Stack>
                             </Box>
                         </Box>
                     ) : (

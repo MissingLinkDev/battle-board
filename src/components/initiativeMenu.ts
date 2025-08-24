@@ -63,7 +63,7 @@ export function registerInitiativeContextMenu() {
                                 movement: 30,
                                 attackRange: 0,  // default 0 so range ring won’t draw
 
-                                elevation: 0,
+                                playerCharacter: false,
                             } as MetaShape;
                         } else {
                             delete (it.metadata as any)[META_KEY];

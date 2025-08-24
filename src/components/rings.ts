@@ -8,23 +8,35 @@ const RANGE_COLOR = "#dc3545";
 const DASH = [10, 20];
 const STROKE_W = 10 as const;
 
+type RingVariant = "normal" | "dm";
+
 type RingKind = "move" | "range";
 type RingMeta = {
     ownerId: string; // token id
     kind: RingKind;
+    variant: RingVariant;
     __ring__: true;
     [k: string]: unknown;
 };
 
 const isShapeItem = (it: Item): it is Shape => it.type === "SHAPE";
-const isOurRing = (it: Item, ownerId?: string): it is Shape => {
+const isOurRing = (it: Item, ownerId?: string, variant?: RingVariant): it is Shape => {
     if (!isShapeItem(it)) return false;
     const m = it.metadata as any;
-    return m?.[RING_META] && m?.__ring__ === true && (!ownerId || m?.ownerId === ownerId);
+    const mine = m?.[RING_META] && m?.__ring__ === true;
+    if (!mine) return false;
+    if (ownerId && m?.ownerId !== ownerId) return false;
+    if (variant && m?.variant !== variant) return false;
+    return true;
 };
 
-function ringMeta(ownerId: string, kind: RingKind): RingMeta {
-    return { ownerId, kind, __ring__: true, [RING_META]: true } as any;
+function ringMeta(ownerId: string, kind: RingKind, variant: RingVariant): RingMeta {
+    return { ownerId, kind, variant, __ring__: true, [RING_META]: true } as any;
+}
+
+export async function clearRingsFor(tokenId: string, variant?: RingVariant) {
+    const rings = await OBR.scene.items.getItems((it) => isOurRing(it, tokenId, variant));
+    if (rings.length) await OBR.scene.items.deleteItems(rings.map((r) => r.id));
 }
 
 /** Convert a distance in grid units (e.g., feet) to pixels based on the scene grid. */
@@ -35,8 +47,8 @@ async function unitsToPixels(units: number): Promise<number> {
 }
 
 /** Remove all rings created by us (any owner). */
-export async function clearRings() {
-    const rings = await OBR.scene.items.getItems((it) => isOurRing(it));
+export async function clearRings(variant?: RingVariant) {
+    const rings = await OBR.scene.items.getItems((it) => isOurRing(it, undefined, variant));
     if (rings.length) await OBR.scene.items.deleteItems(rings.map((r) => r.id));
 }
 
@@ -48,8 +60,10 @@ function buildCircle(opts: {
     color: string;
     kind: RingKind;
     attached: boolean;
+    visible: boolean;
+    variant: RingVariant;
 }) {
-    const { tokenId, center, diameterPx, color, kind, attached } = opts;
+    const { tokenId, center, diameterPx, color, kind, attached, visible, variant } = opts;
 
     const builder = buildShape()
         .shapeType("CIRCLE")
@@ -63,10 +77,11 @@ function buildCircle(opts: {
         .strokeDash(DASH)
         .locked(true)
         .disableHit(false)
-        .metadata(ringMeta(tokenId, kind));
+        .visible(visible)
+        .metadata(ringMeta(tokenId, kind, variant));
 
     if (attached) {
-        builder.layer("ATTACHMENT").attachedTo(tokenId);
+        builder.layer("DRAWING").attachedTo(tokenId);
     } else {
         // Unattached ring sits in DRAWING layer so it doesn't follow the token
         builder.layer("DRAWING");
@@ -119,6 +134,8 @@ export async function ensureRings(params: {
     attackRange: number;
     moveAttached?: boolean;  // default false
     rangeAttached?: boolean; // default true
+    visible?: boolean;
+    variant?: RingVariant;
 }) {
     const {
         tokenId,
@@ -126,6 +143,8 @@ export async function ensureRings(params: {
         attackRange,
         moveAttached = false,
         rangeAttached = true,
+        visible = true,
+        variant = "normal",
     } = params;
 
     // Get the token (for initial placement center)
@@ -136,7 +155,7 @@ export async function ensureRings(params: {
     const tokenFeet = getTokenFeet(token);
 
     // Find any existing rings we created for this token (attached or not)
-    const allRings = await OBR.scene.items.getItems((it) => isOurRing(it, tokenId));
+    const allRings = await OBR.scene.items.getItems((it) => isOurRing(it, tokenId, variant));
     const existingMove = allRings.find((r) => (r.metadata as any)?.kind === "move");
     const existingRange = allRings.find((r) => (r.metadata as any)?.kind === "range");
 
@@ -151,11 +170,12 @@ export async function ensureRings(params: {
         position?: Vector2;
         layer?: string;
         attachedTo?: string | null;
+        visible?: boolean;
     }[] = [];
     const toDelete: string[] = [];
 
     // Helper to see if an existing ring matches attachment mode
-    const hasAttachment = (r: Shape) => r.layer === "ATTACHMENT" && (r as any).attachedTo === tokenId;
+    const hasAttachment = (r: Shape) => r.layer === "DRAWING" && (r as any).attachedTo === tokenId;
 
     // MOVE RING (default: unattached)
     if (wantMove > 0) {
@@ -173,6 +193,8 @@ export async function ensureRings(params: {
                         color: MOVEMENT_COLOR,
                         kind: "move",
                         attached: moveAttached,
+                        visible,
+                        variant,
                     })
                 );
             } else {
@@ -183,11 +205,14 @@ export async function ensureRings(params: {
                     moveAttached &&
                     (existingMove.position.x !== center.x || existingMove.position.y !== center.y);
 
-                if (needsSize || needsPos) {
+                const needsVis = existingMove.visible !== visible;
+
+                if (needsSize || needsPos || needsVis) {
                     toUpdate.push({
                         id: existingMove.id,
                         ...(needsSize ? { width: wantMove, height: wantMove } : {}),
                         ...(needsPos ? { position: center } : {}),
+                        ...(needsVis ? { visible } : {}),
                     });
                 }
             }
@@ -200,6 +225,8 @@ export async function ensureRings(params: {
                     color: MOVEMENT_COLOR,
                     kind: "move",
                     attached: moveAttached,
+                    visible,
+                    variant,
                 })
             );
         }
@@ -222,6 +249,8 @@ export async function ensureRings(params: {
                         color: RANGE_COLOR,
                         kind: "range",
                         attached: rangeAttached,
+                        visible,
+                        variant,
                     })
                 );
             } else {
@@ -231,11 +260,14 @@ export async function ensureRings(params: {
                     rangeAttached &&
                     (existingRange.position.x !== center.x || existingRange.position.y !== center.y);
 
-                if (needsSize || needsPos) {
+                const needsVisR = existingRange.visible !== visible;
+
+                if (needsSize || needsPos || needsVisR) {
                     toUpdate.push({
                         id: existingRange.id,
                         ...(needsSize ? { width: wantRange, height: wantRange } : {}),
                         ...(needsPos ? { position: center } : {}),
+                        ...(needsVisR ? { visible } : {}),
                     });
                 }
             }
@@ -248,6 +280,8 @@ export async function ensureRings(params: {
                     color: RANGE_COLOR,
                     kind: "range",
                     attached: rangeAttached,
+                    visible,
+                    variant,
                 })
             );
         }
@@ -267,6 +301,7 @@ export async function ensureRings(params: {
                     if (upd.width !== undefined) it.width = upd.width;
                     if (upd.height !== undefined) it.height = upd.height;
                     if (upd.position) it.position = upd.position;
+                    if (upd.visible !== undefined) (it as any).visible = upd.visible; // 👈 add this line
                 }
             }
         );

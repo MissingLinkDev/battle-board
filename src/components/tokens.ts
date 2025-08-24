@@ -7,6 +7,8 @@ export type CMToken = {
     layer: "CHARACTER" | "MOUNT";
     position: { x: number; y: number };
     attachedTo?: string | null;
+    visible?: boolean;
+
 };
 
 export function itemsToCMTokens(items: Item[]): CMToken[] {
@@ -20,6 +22,7 @@ export function itemsToCMTokens(items: Item[]): CMToken[] {
             layer: it.layer as "CHARACTER" | "MOUNT",
             position: { ...it.position },
             attachedTo: it.attachedTo ?? null,
+            visible: it.visible,
         });
     }
     return list;

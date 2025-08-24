@@ -17,6 +17,7 @@ export type InitiativeSettings = {
     disablePlayerList: boolean;
     displayPlayerHealthStatus: boolean;
     showRangeRings: boolean;
+    dmRingToggle: boolean;
 };
 
 export type SceneState = {
@@ -38,6 +39,7 @@ export const DEFAULT_SETTINGS: InitiativeSettings = {
     disablePlayerList: false,
     displayPlayerHealthStatus: true,
     showRangeRings: true,
+    dmRingToggle: true,
 };
 
 const DEFAULT_SCENE_STATE: SceneState = {

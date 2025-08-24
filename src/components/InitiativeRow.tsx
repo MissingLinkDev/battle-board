@@ -21,8 +21,13 @@ import MenuItem from "@mui/material/MenuItem";
 
 import type { InitiativeItem } from "./InitiativeItem";
 import { CommitNumberField } from "./CommitFields";
+import { ensureRings, clearRingsFor } from "./rings";
 import CloseRounded from "@mui/icons-material/CloseRounded";
 import Add from "@mui/icons-material/Add";
+import RadarRounded from "@mui/icons-material/RadarRounded";
+import Tooltip from "@mui/material/Tooltip";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Checkbox from "@mui/material/Checkbox";
 
 type RowSettings = {
     showMovementRange: boolean;
@@ -31,6 +36,7 @@ type RowSettings = {
     showDistances: boolean;
     showAC: boolean;
     showHP: boolean;
+    showDMR: boolean;
 };
 
 type Props = {
@@ -42,6 +48,7 @@ type Props = {
     onSizeChange?: () => void;
     onRemove?: (id: string) => void;
     settings?: RowSettings;
+    started: boolean;
 };
 
 // const CONDITIONS_2024 = [
@@ -62,6 +69,7 @@ export default function InitiativeRow({
     onSizeChange,
     onRemove,
     settings,
+    started,
 }: Props) {
     // Local UI state for inputs
     const [initiative, setInitiative] = useState<number>(row.initiative);
@@ -73,11 +81,15 @@ export default function InitiativeRow({
     const [attackRange, setAttackRange] = useState<number>(row.attackRange);
     const [editingField, setEditingField] = useState<null | "cur" | "max" | "temp" | "ac" | null>(null);
     const [menuPos, setMenuPos] = useState<{ mouseX: number; mouseY: number } | null>(null);
+    const [playerCharacter, setPlayerCharacter] = useState<boolean>(!!row.playerCharacter);
+
 
     // HP popover state
     const [hpAnchor, setHpAnchor] = useState<HTMLElement | null>(null);
     const hpOpen = Boolean(hpAnchor);
     const closeHp = () => setHpAnchor(null);
+
+    const [dmPreview, setDmPreview] = useState(false);
 
     const commitAc = (v: number) => {
         const next = Math.max(0, v);
@@ -85,23 +97,30 @@ export default function InitiativeRow({
         bubble({ ac: next });
         setEditingField(null);
     };
-    const commitCur = (v: number) => {
-        setCurrentHP(v);
-        onChange?.({ currentHP: v });
-        setEditingField(null);
-    };
 
-    const commitMax = (v: number) => {
-        const m = Math.max(0, v);
+    const applyMaxChange = (nextMaxRaw: number) => {
+        const m = Math.max(0, nextMaxRaw);
+        const prevMax = row.maxHP;               // stable previous value for delta calc
+        let nextCur = currentHP;
+
+        if (!started) {
+            const delta = m - prevMax;
+            nextCur = currentHP + delta;
+            // clamp to [0, m]
+            if (nextCur < 0) nextCur = 0;
+            if (nextCur > m) nextCur = m;
+        } else {
+            // in combat: only clamp down if current > new max
+            if (nextCur > m) nextCur = m;
+        }
+
         setMaxHP(m);
-        if (currentHP > m) { setCurrentHP(m); onChange?.({ currentHP: m }); }
-        onChange?.({ maxHP: m });
-        setEditingField(null);
-    };
+        if (nextCur !== currentHP) setCurrentHP(nextCur);
 
-    const commitTemp = (v: number) => {
-        setTempHP(v);
-        onChange?.({ tempHP: v });
+        const patch: Partial<InitiativeItem> = { maxHP: m };
+        if (nextCur !== currentHP) patch.currentHP = nextCur;
+        onChange?.(patch);
+
         setEditingField(null);
     };
 
@@ -151,6 +170,7 @@ export default function InitiativeRow({
         setAc(row.ac);
         setMovement(row.movement);
         setAttackRange(row.attackRange);
+        setPlayerCharacter(!!row.playerCharacter); // NEW
     }, [
         row.id,
         row.initiative,
@@ -160,6 +180,7 @@ export default function InitiativeRow({
         row.ac,
         row.movement,
         row.attackRange,
+        row.playerCharacter, // NEW
     ]);
 
     // Style helpers
@@ -217,6 +238,7 @@ export default function InitiativeRow({
         range: settings?.showAttackRange ?? true,
         conditions: settings?.showConditions ?? true,
         distances: settings?.showDistances ?? true,
+        dmr: settings?.showDMR ?? true,
     };
 
     const handleContextMenuCapture = (e: React.MouseEvent) => {
@@ -236,6 +258,41 @@ export default function InitiativeRow({
     };
 
     const closeMenu = () => setMenuPos(null);
+
+    useEffect(() => {
+        if (!dmPreview) return;
+        ensureRings({
+            tokenId: row.id,
+            movement,
+            attackRange,
+            moveAttached: false,
+            rangeAttached: true,
+            visible: false,   // DM-only
+            variant: "dm",    // separate set from normal rings
+        }).catch(console.error);
+    }, [dmPreview, movement, attackRange, row.id]);
+
+    useEffect(() => () => { clearRingsFor(row.id, "dm").catch(() => { }); }, [row.id]);
+
+    const toggleDmPreview = async () => {
+        if (!dmPreview) {
+            // turn ON
+            await ensureRings({
+                tokenId: row.id,
+                movement,
+                attackRange,
+                moveAttached: false,
+                rangeAttached: true,
+                visible: false,
+                variant: "dm",
+            });
+            setDmPreview(true);
+        } else {
+            // turn OFF
+            await clearRingsFor(row.id, "dm");
+            setDmPreview(false);
+        }
+    };
 
     return (
         <>
@@ -306,9 +363,9 @@ export default function InitiativeRow({
                 >
                     <Box
                         sx={{
-                            display: "grid",
-                            gridTemplateColumns: row.visible === false ? "12px 4px 1fr" : "1fr",
+                            display: "flex",
                             alignItems: "center",
+                            gap: 0.5,
                             minWidth: 0,
                             maxWidth: "100%",
                         }}
@@ -396,27 +453,26 @@ export default function InitiativeRow({
                                         size="small"
                                         variant="outlined"
                                         value={currentHP}
-                                        onCommit={commitCur}
-                                        onBlur={() => commitCur(currentHP)}
-                                        onKeyDown={keyCommit(() => commitCur(currentHP))}
+                                        allowMath
+                                        min={0}
+                                        max={Math.max(0, maxHP)}
+                                        onCommit={(val) => {
+                                            setCurrentHP(val);
+                                            bubble({ currentHP: val });
+                                            setEditingField(null)
+                                        }}
                                         sx={inputSx}
                                         slotProps={{
                                             htmlInput: {
                                                 ...baseHtmlInput,
+                                                inputMode: "text",
+                                                pattern: undefined,
                                                 autoFocus: true,
                                                 onFocus: (e: any) => e.currentTarget.select(),
                                                 "aria-label": "current hp",
                                                 style: { ...baseHtmlInput.style, width: 34 },
                                                 // live-parse as you type
-                                                onChange: (e: any) => {
-                                                    const n = Number(e.target.value.replace(/[^\d-]/g, ""));
-                                                    if (Number.isFinite(n)) setCurrentHP(n);
-                                                },
-                                                // ← commit on click-away
-                                                onBlur: () => commitCur(currentHP),
-                                                // optional: second-click commits immediately
-                                                onMouseDown: clickCommit(() => commitCur(currentHP)),
-                                                onTouchStart: clickCommit(() => commitCur(currentHP)),
+
                                             },
                                         }}
                                     />
@@ -440,24 +496,21 @@ export default function InitiativeRow({
                                         size="small"
                                         variant="outlined"
                                         value={maxHP}
-                                        onCommit={commitMax}
-                                        onBlur={() => commitMax(maxHP)}
-                                        onKeyDown={keyCommit(() => commitMax(maxHP))}
+                                        allowMath
+                                        min={0}
+                                        onCommit={(nextMax) => applyMaxChange(nextMax)}
                                         sx={inputSx}
                                         slotProps={{
                                             htmlInput: {
                                                 ...baseHtmlInput,
+                                                inputMode: "text",
+                                                pattern: undefined,
                                                 autoFocus: true,
                                                 onFocus: (e: any) => e.currentTarget.select(),
-                                                "aria-label": "max hp",
+                                                "aria-label": "current hp",
                                                 style: { ...baseHtmlInput.style, width: 34 },
-                                                onChange: (e: any) => {
-                                                    const n = Number(e.target.value.replace(/[^\d-]/g, ""));
-                                                    if (Number.isFinite(n)) setMaxHP(n);
-                                                },
-                                                onBlur: () => commitMax(maxHP),                 // ← commit on click-away
-                                                onMouseDown: clickCommit(() => commitMax(maxHP)),
-                                                onTouchStart: clickCommit(() => commitMax(maxHP)),
+                                                // live-parse as you type
+
                                             },
                                         }}
                                     />
@@ -483,24 +536,25 @@ export default function InitiativeRow({
                                     size="small"
                                     variant="outlined"
                                     value={tempHP}
-                                    onCommit={commitTemp}
-                                    onBlur={() => commitTemp(tempHP)}
-                                    onKeyDown={keyCommit(() => commitTemp(tempHP))}
+                                    allowMath
+                                    min={0}
+                                    onCommit={(val) => {
+                                        setTempHP(val);
+                                        bubble({ tempHP: val });
+                                        setEditingField(null)
+                                    }}
                                     sx={inputSx}
                                     slotProps={{
                                         htmlInput: {
                                             ...baseHtmlInput,
+                                            inputMode: "text",
+                                            pattern: undefined,
                                             autoFocus: true,
                                             onFocus: (e: any) => e.currentTarget.select(),
-                                            "aria-label": "temp hp",
+                                            "aria-label": "current hp",
                                             style: { ...baseHtmlInput.style, width: 34 },
-                                            onChange: (e: any) => {
-                                                const n = Number(e.target.value.replace(/[^\d-]/g, ""));
-                                                if (Number.isFinite(n)) setTempHP(n);
-                                            },
-                                            onBlur: () => commitTemp(tempHP),               // ← commit on click-away
-                                            onMouseDown: clickCommit(() => commitTemp(tempHP)),
-                                            onTouchStart: clickCommit(() => commitTemp(tempHP)),
+                                            // live-parse as you type
+
                                         },
                                     }}
                                 />
@@ -516,164 +570,36 @@ export default function InitiativeRow({
                                 </Typography>
                             )}
                         </TableCell>
-                        <TableCell width={18} align="center" onClick={(e) => e.stopPropagation()}>
-                            {/* Chevron opens the existing popover menu */}
-                            <IconButton
-                                size="small"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setHpAnchor((prev) => (prev ? null : e.currentTarget as HTMLElement));
-                                }}
-                                sx={{ p: 0.25, ml: 0.25 }}
-                            >
-                                <KeyboardArrowDown sx={{ fontSize: "1.05rem", opacity: 0.9 }} />
-                            </IconButton>
 
-
-
-                            {/* HP Popover */}
-                            <Popover
-                                open={hpOpen}
-                                anchorEl={hpAnchor}
-                                onClose={closeHp}
-                                anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-                                transformOrigin={{ vertical: "top", horizontal: "center" }}
-                                container={typeof window !== "undefined" ? document.body : undefined}
-                                slotProps={{
-                                    paper: {
-                                        sx: { p: 1.25, borderRadius: 1, width: 320 },   // ← padding + shape
-                                        onClick: (e: React.MouseEvent) => e.stopPropagation(), // keep row click from firing
-                                    },
-                                }}
-                            >
-                                <ClickAwayListener onClickAway={closeHp}>
-                                    <Box onKeyDown={(e) => { if (e.key === "Escape") closeHp(); }}>
-                                        {/* Top row: Cur / Max / Temp (commit immediately) */}
-                                        <Stack direction="row" spacing={1} justifyContent="space-around" alignItems="center">
-                                            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-                                                <Typography sx={{ fontSize: "0.72rem" }}>Cur</Typography>
-                                                <CommitNumberField
-                                                    size="small" variant="outlined" value={currentHP}
-                                                    onCommit={(v) => {
-                                                        setCurrentHP(v);
-                                                        bubble({ currentHP: v });
-                                                        closeHp();                 // ← close after commit
-                                                    }}
-                                                    sx={inputSx}
-                                                    slotProps={{
-                                                        htmlInput: {
-                                                            ...baseHtmlInput,
-                                                            autoFocus: true,
-                                                            onFocus: (e: any) => e.currentTarget.select(),
-                                                            style: { ...baseHtmlInput.style, width: 56 }
-                                                        }
-                                                    }}
-                                                />
-                                            </Box>
-
-                                            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-                                                <Typography sx={{ fontSize: "0.72rem" }}>Max</Typography>
-                                                <CommitNumberField
-                                                    size="small" variant="outlined" value={maxHP}
-                                                    onCommit={(v) => {
-                                                        const m = Math.max(0, v);
-                                                        setMaxHP(m);
-                                                        if (currentHP > m) { setCurrentHP(m); bubble({ currentHP: m }); }
-                                                        bubble({ maxHP: m });
-                                                        closeHp();                 // ← close after commit
-                                                    }}
-                                                    sx={inputSx}
-                                                    slotProps={{
-                                                        htmlInput: {
-                                                            ...baseHtmlInput,
-                                                            autoFocus: true,
-                                                            onFocus: (e: any) => e.currentTarget.select(),
-                                                            style: { ...baseHtmlInput.style, width: 56 }
-                                                        }
-                                                    }}
-                                                />
-                                            </Box>
-
-                                            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-                                                <Typography sx={{ fontSize: "0.72rem" }}>Temp</Typography>
-                                                <CommitNumberField
-                                                    size="small" variant="outlined" value={tempHP}
-                                                    onCommit={(v) => {
-                                                        setTempHP(v);
-                                                        bubble({ tempHP: v });
-                                                        closeHp();                 // ← close after commit
-                                                    }}
-                                                    sx={inputSx}
-                                                    slotProps={{
-                                                        htmlInput: {
-                                                            ...baseHtmlInput,
-                                                            autoFocus: true,
-                                                            onFocus: (e: any) => e.currentTarget.select(),
-                                                            style: { ...baseHtmlInput.style, width: 56 }
-                                                        }
-                                                    }}
-                                                />
-                                            </Box>
-                                        </Stack>
-
-                                        <Divider sx={{ my: 0.75 }} />
-
-                                        {/* Quick adjust: [Damage] [amount input] [Heal] */}
-                                        <Stack direction="row" alignItems="center" justifyContent="space-around" spacing={1}>
-                                            {/* DAMAGE apply */}
-                                            <Button
-                                                size="small"
-                                                variant="outlined"
-                                                color="error"
-                                                onClick={doDamage}
-                                                sx={{ minWidth: 72 }}
-                                            >
-                                                Damage
-                                            </Button>
-
-                                            {/* AMOUNT input (center) */}
-                                            <CommitNumberField
-                                                size="small"
-                                                variant="outlined"
-                                                value={adjAmount}
-                                                onCommit={(v) => setAdjAmount(Math.max(0, v))}
-                                                sx={inputSx}
-                                                slotProps={{
-                                                    htmlInput: {
-                                                        ...baseHtmlInput,
-                                                        autoFocus: true,
-                                                        onFocus: (e: any) => e.currentTarget.select(),
-                                                        "aria-label": "adjust amount",
-                                                        style: { ...baseHtmlInput.style, width: 80, textAlign: "center" },
-                                                        // optional nicety: Enter to heal by default; Shift+Enter to damage
-                                                        onKeyDown: (e: any) => {
-                                                            if (e.key === "Enter" && e.shiftKey) doDamage();
-                                                            else if (e.key === "Enter") doHeal();
-                                                        },
-                                                    },
-                                                }}
-                                            />
-
-                                            {/* HEAL apply */}
-                                            <Button
-                                                size="small"
-                                                variant="outlined"
-                                                color="success"
-                                                onClick={doHeal}
-                                                sx={{ minWidth: 72 }}
-                                            >
-                                                Heal
-                                            </Button>
-                                        </Stack>
-                                    </Box>
-                                </ClickAwayListener>
-                            </Popover>
-                        </TableCell >
                     </>) : null}
+                {vis.dmr === true ? (
+                    <TableCell width={24} align="center" onClick={(e) => e.stopPropagation()}>
+                        <Box
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                toggleDmPreview();
+                            }}
+                            sx={{
+                                width: 18,
+                                height: 18,
+                                lineHeight: 0,
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                cursor: "pointer",
+                                color: dmPreview ? "primary.main" : "text.secondary",
+                            }}
+                            aria-label="DM rings"
+                        >
+                            <RadarRounded sx={{ fontSize: 18, display: "block" }} />
+                        </Box>
+                    </TableCell>
+                ) : null}
             </TableRow >
             {/* --- Right-click menu --- */}
-            <Menu
-                open={!!menuPos}
+            < Menu
+                open={!!menuPos
+                }
                 onClose={closeMenu}
                 anchorReference="anchorPosition"
                 anchorPosition={menuPos ? { top: menuPos.mouseY, left: menuPos.mouseX } : undefined}
@@ -686,9 +612,9 @@ export default function InitiativeRow({
                 >
                     Remove
                 </MenuItem>
-            </Menu>
+            </Menu >
             {/* Expanded panel */}
-            <TableRow sx={{ "& > *": { borderBottom: "unset" } }}>
+            < TableRow sx={{ "& > *": { borderBottom: "unset" } }}>
                 <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={7}>
                     <Collapse
                         in={!!expanded}
@@ -702,9 +628,28 @@ export default function InitiativeRow({
                             <Stack direction="row" spacing={1.5} alignItems="stretch">
                                 {/* Left: Overlays */}
                                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                                    <Typography sx={{ fontWeight: 700, fontSize: "0.8rem", textAlign: "center", mb: 0.75 }}>
+                                    <Typography sx={{ fontWeight: 700, fontSize: "0.8rem", textAlign: "center" }}>
                                         Overlays
                                     </Typography>
+
+                                    {/* Player Character toggle (centered) */}
+                                    <Box sx={{ display: "flex", justifyContent: "center", mb: 1 }}>
+                                        <FormControlLabel
+                                            control={
+                                                <Checkbox
+                                                    size="small"
+                                                    checked={playerCharacter}
+                                                    onChange={(e) => {
+                                                        const val = e.target.checked;
+                                                        setPlayerCharacter(val);
+                                                        bubble({ playerCharacter: val });
+                                                    }}
+                                                />
+                                            }
+                                            label="Player Character"
+                                            sx={{ "& .MuiFormControlLabel-label": { fontSize: "0.75rem" } }}
+                                        />
+                                    </Box>
                                     {/* Movement + Attack Range inputs (conditional) */}
                                     {(vis.move || vis.range) && (
                                         <Stack direction="row" spacing={1} justifyContent="center" sx={{ mb: 1 }}>
@@ -750,6 +695,7 @@ export default function InitiativeRow({
                                                     <Typography sx={{ fontSize: "0.65rem", color: "text.secondary" }}>ft</Typography>
                                                 </Box>
                                             )}
+
                                         </Stack>
                                     )}
                                     {/* Conditions (conditional) */}
@@ -824,7 +770,7 @@ export default function InitiativeRow({
                         </Box>
                     </Collapse>
                 </TableCell>
-            </TableRow>
+            </TableRow >
         </>
     );
 }

@@ -11,4 +11,5 @@ export interface InitiativeItem {
     conditions: string[];
     movement: number;
     attackRange: number;
+    playerCharacter: boolean;
 }
