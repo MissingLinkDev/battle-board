@@ -6,6 +6,7 @@ import { META_KEY, type MetaShape } from "./metadata";
 export function registerInitiativeContextMenu() {
     const id = META_KEY + "/menu";
 
+
     OBR.contextMenu.create({
         id,
         icons: [

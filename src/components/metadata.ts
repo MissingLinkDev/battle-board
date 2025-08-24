@@ -44,6 +44,6 @@ export function isMetadata(v: unknown): v is MetaShape {
         Array.isArray(o.conditions) &&
         typeof o.movement === "number" &&
         typeof o.attackRange === "number" &&
-        typeof o.elevation === "number"
+        typeof o.playerCharacter === "boolean"
     );
 }
