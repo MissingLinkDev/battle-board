@@ -25,6 +25,21 @@ type Props = {
     rows?: InitiativeItem[];
 };
 
+type MetaForRings = {
+    movement?: number;
+    attackRange?: number;
+    playerCharacter?: boolean;
+
+    movementColor?: string | null;
+    rangeColor?: string | null;
+    movementWeight?: number | null;
+    rangeWeight?: number | null;
+    movementPattern?: "solid" | "dash" | null;
+    rangePattern?: "solid" | "dash" | null;
+    movementOpacity?: number | null; // 0..1
+    rangeOpacity?: number | null;    // 0..1
+};
+
 export default function SettingsView({ value, onChange, onBack, rows }: Props) {
     const rootRef = useRef<HTMLDivElement | null>(null);
 
@@ -40,8 +55,8 @@ export default function SettingsView({ value, onChange, onBack, rows }: Props) {
                 options: [
                     ["Armor", "showArmor"],
                     ["HP", "showHP"],
-                    ["Movement Range", "showMovementRange"],
-                    ["Attack Range", "showAttackRange"],
+                    // ["Movement Range", "showMovementRange"],
+                    // ["Attack Range", "showAttackRange"],
                     ["Distances", "showDistances"],
                     ["DM Distance Rings Toggle", "dmRingToggle"],
                 ] as const,
@@ -84,7 +99,7 @@ export default function SettingsView({ value, onChange, onBack, rows }: Props) {
             try {
                 // If rings are globally hidden or neither type is enabled → nuke any shown rings
                 if (!value.showRangeRings || (!value.showMovementRange && !value.showAttackRange)) {
-                    await clearRings();
+                    await clearRings("normal");
                     return;
                 }
 
@@ -99,27 +114,38 @@ export default function SettingsView({ value, onChange, onBack, rows }: Props) {
 
                 // No active → just clear (prevents stale rings hanging around)
                 if (!active) {
-                    await clearRings();
+                    await clearRings("normal");
                     return;
                 }
 
-                const meta = (active.metadata as any)[META_KEY] as {
-                    movement?: number;
-                    attackRange?: number;
-                    playerCharacter?: boolean; // <-- expect this in metadata
-                };
+                const meta = ((active.metadata as any)[META_KEY] ?? {}) as MetaForRings;
 
                 // If the toggle is "Show Range Rings for Player Characters", do nothing for non‑PCs
                 if (!meta?.playerCharacter) {
-                    await clearRings();
+                    await clearRings("normal");
                     return;
                 }
 
                 // Only pass through the ring types that are enabled
                 await ensureRings({
+                    // identity / wiring
                     tokenId: active.id,
+                    variant: "normal",
+                    visible: true,
+                    moveAttached: false,
+                    rangeAttached: true,
+                    // distances (respect settings switches)
                     movement: value.showMovementRange ? (meta.movement ?? 0) : 0,
                     attackRange: value.showAttackRange ? (meta.attackRange ?? 0) : 0,
+                    // style (pull entirely from metadata; fall back to your defaults)
+                    movementColor: meta.movementColor ?? "#519e00",
+                    rangeColor: meta.rangeColor ?? "#fe4c50",
+                    movementWeight: meta.movementWeight ?? 12,
+                    rangeWeight: meta.rangeWeight ?? 12,
+                    movementPattern: meta.movementPattern ?? "dash",
+                    rangePattern: meta.rangePattern ?? "dash",
+                    movementOpacity: meta.movementOpacity ?? 1,
+                    rangeOpacity: meta.rangeOpacity ?? 1,
                 });
             } catch (err) {
                 console.error("Failed to refresh rings from settings:", err);

@@ -22,6 +22,10 @@ import type { InitiativeItem } from "./InitiativeItem";
 import { CommitNumberField } from "./CommitFields";
 import { ensureRings, clearRingsFor } from "./rings";
 import ColorPicker from "./ColorPicker";
+import type { CMToken } from "./tokens";
+import { getGridInfo, formatFeet, type DistanceMode, distanceInUnits } from "./utils";
+import Tooltip from "@mui/material/Tooltip";
+import InfoRounded from "@mui/icons-material/InfoRounded";
 
 
 type RowSettings = {
@@ -44,16 +48,8 @@ type Props = {
     onRemove?: (id: string) => void;
     settings?: RowSettings;
     started: boolean;
+    tokens: CMToken[];
 };
-
-// const CONDITIONS_2024 = [
-//     "Blinded", "Charmed", "Deafened", "Frightened", "Grappled", "Incapacitated",
-//     "Invisible", "Paralyzed", "Petrified", "Poisoned", "Prone", "Restrained", "Stunned",
-//     // Common extras DMs track
-//     "Concentrating", "Dodging", "Disengaging", "Dashing", "Helped", "Ready", "Inspired"
-// ] as const;
-// type ConditionName = (typeof CONDITIONS_2024)[number];
-
 
 export default function InitiativeRow({
     row,
@@ -65,6 +61,7 @@ export default function InitiativeRow({
     onRemove,
     settings,
     started,
+    tokens,
 }: Props) {
     // Local UI state for inputs
     const [initiative, setInitiative] = useState<number>(row.initiative);
@@ -85,6 +82,7 @@ export default function InitiativeRow({
     const [rangeWeight, setRangeWeight] = useState<number>(row.rangeWeight ?? 10);
     const [rangePattern, setRangePattern] = useState<"solid" | "dash">(row.rangePattern ?? "dash");
     const [rangeOpacity, setRangeOpacity] = useState<number>(row.rangeOpacity ?? 1);
+    const [distances, setDistances] = useState<{ id: string; name: string; ft: number }[]>([]);
 
 
     const [dmPreview, setDmPreview] = useState(false);
@@ -319,6 +317,59 @@ export default function InitiativeRow({
         }
     };
 
+    useEffect(() => {
+        let cancelled = false;
+
+        (async () => {
+            if (!settings?.showDistances) {
+                // If the UI has distances hidden, avoid doing the work
+                setDistances([]);
+                return;
+            }
+
+            const me = tokens.find((t) => t.id === row.id);
+            if (!me) {
+                setDistances([]);
+                return;
+            }
+
+            const grid = await getGridInfo();
+            // choose how to measure: "center" or "edge"
+            // wire this to your settings if you have one; default to "edge"
+            const mode: DistanceMode = (settings as any)?.distanceMode ?? "edge";
+            console.log("mode", mode);
+            // Show distances to all OTHER visible tokens in the CHARACTER/MOUNT layers
+            // (Your tokens list already filters to CHARACTER/MOUNT; we skip invisible tokens by default)
+            const list = tokens
+                .filter((t) => t.id !== row.id && t.visible !== false)
+                .map((t) => {
+                    const raw = distanceInUnits(
+                        me.position,
+                        t.position,
+                        grid,
+                        mode,
+                        // only needed in edge mode
+                        mode === "edge"
+                            ? { radiusAUnits: me.radiusFeet, radiusBUnits: t.radiusFeet }
+                            : undefined
+                    );
+
+                    return {
+                        id: t.id,
+                        name: t.name || "(unnamed)",
+                        ft: formatFeet(raw),
+                    };
+                })
+                .sort((a, b) => a.ft - b.ft);
+
+            if (!cancelled) setDistances(list);
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [tokens, row.id, settings?.showDistances]);
+
     return (
         <>
             <TableRow
@@ -331,7 +382,9 @@ export default function InitiativeRow({
                 onContextMenuCapture={handleContextMenuCapture}
                 sx={{
                     cursor: "context-menu",
-                    "& > *": { borderBottom: "unset" },
+                    "& > td, & > th": (theme) => ({
+                        borderBottom: expanded ? "none" : `1px solid ${theme.palette.divider}`,
+                    }),     // ← important
                     "& td": { py: 0.5, px: 0.5 },
                     borderLeft: row.active ? "3px solid" : "3px solid transparent",
                     borderLeftColor: row.active ? "success.light" : "transparent",
@@ -646,7 +699,16 @@ export default function InitiativeRow({
                 </MenuItem>
             </Menu >
             {/* Expanded panel */}
-            < TableRow sx={{ "& > *": { borderBottom: "unset" } }}>
+            <TableRow
+                sx={{
+                    "& > td": (theme) => ({
+                        paddingTop: 0,
+                        paddingBottom: 0,
+                        // only show a separator when open
+                        borderBottom: expanded ? `1px solid ${theme.palette.divider}` : "none",
+                    }),
+                }}
+            >
                 <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={7}>
                     <Collapse
                         in={!!expanded}
@@ -656,11 +718,13 @@ export default function InitiativeRow({
                         onExited={onSizeChange}
                         onEntering={onSizeChange}
                     >
-                        <Box sx={{ p: 1 }}>
+                        <Box sx={{ px: 1, pb: 1 }}>
                             <Stack direction="row" spacing={1.5} alignItems="stretch">
                                 {/* Left: Overlays */}
                                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                                    <Typography sx={{ fontWeight: 700, fontSize: "0.8rem", textAlign: "center" }}>
+                                    <Typography
+                                        sx={{ fontWeight: 700, fontSize: "0.95rem", textAlign: "center", mb: 0.75 }}
+                                    >
                                         Overlays
                                     </Typography>
 
@@ -679,130 +743,182 @@ export default function InitiativeRow({
                                                 />
                                             }
                                             label="Player Character"
-                                            sx={{ "& .MuiFormControlLabel-label": { fontSize: "0.75rem" } }}
+                                            sx={{ "& .MuiFormControlLabel-label": { fontSize: "0.8rem" } }}
                                         />
                                     </Box>
-                                    {/* Movement + Attack Range inputs (conditional) */}
-                                    {(vis.move || vis.range) && (
-                                        <Stack direction="column" spacing={1} justifyContent="center" sx={{ mb: 1 }}>
-                                            {/* Move */}
-                                            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                                                <Typography sx={{ fontSize: "0.75rem" }}>Move</Typography>
-                                                <CommitNumberField
-                                                    size="small"
-                                                    variant="outlined"
-                                                    value={movement}
-                                                    onCommit={(v) => {
-                                                        setMovement(v);
-                                                        bubble?.({ movement: v });
-                                                    }}
-                                                    sx={{
-                                                        "& .MuiOutlinedInput-root": {
-                                                            borderRadius: 0.5,
-                                                            fontSize: "0.75rem",
-                                                            height: 24,
-                                                            p: 0,
-                                                        },
-                                                    }}
-                                                    slotProps={{
-                                                        htmlInput: {
-                                                            inputMode: "numeric",
-                                                            pattern: "[0-9]*",
-                                                            "aria-label": "movement",
-                                                            style: {
-                                                                textAlign: "center",
-                                                                padding: "0 2px",
-                                                                width: 40,
-                                                                fontSize: "0.75rem",
-                                                            },
-                                                        },
-                                                    }}
-                                                />
-                                                <Typography sx={{ fontSize: "0.65rem", color: "text.secondary" }}>ft</Typography>
-                                                {/* NEW ColorPicker */}
-                                                <ColorPicker
-                                                    value={movementColor ?? null}
-                                                    onChange={(hex) => { setMovementColor(hex); bubble({ movementColor: hex }); }}
-                                                    weight={moveWeight}
-                                                    onChangeWeight={(w) => { setMoveWeight(w); bubble({ movementWeight: w }); }}
-                                                    pattern={movePattern}
-                                                    onChangePattern={(p) => { setMovePattern(p); bubble({ movementPattern: p }); }}
-                                                    opacity={moveOpacity}
-                                                    onChangeOpacity={(o) => { setMoveOpacity(o); bubble({ movementOpacity: o }); }}
-                                                />
-                                            </Box>
 
-                                            {/* Range */}
-                                            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                                                <Typography sx={{ fontSize: "0.75rem" }}>Range</Typography>
-                                                <CommitNumberField
-                                                    size="small"
-                                                    variant="outlined"
-                                                    value={attackRange}
-                                                    onCommit={(v) => {
-                                                        setAttackRange(v);
-                                                        bubble?.({ attackRange: v });
-                                                    }}
-                                                    sx={{
-                                                        "& .MuiOutlinedInput-root": {
-                                                            borderRadius: 0.5,
-                                                            fontSize: "0.75rem",
-                                                            height: 24,
-                                                            p: 0,
-                                                        },
-                                                    }}
-                                                    slotProps={{
-                                                        htmlInput: {
-                                                            inputMode: "numeric",
-                                                            pattern: "[0-9]*",
-                                                            "aria-label": "movement",
-                                                            style: {
-                                                                textAlign: "center",
-                                                                padding: "0 2px",
-                                                                width: 40,
-                                                                fontSize: "0.75rem",
-                                                            },
-                                                        },
-                                                    }}
-                                                />
-                                                <Typography sx={{ fontSize: "0.65rem", color: "text.secondary" }}>ft</Typography>
-                                                {/* NEW ColorPicker */}
-                                                <ColorPicker
-                                                    value={rangeColor ?? null}
-                                                    onChange={(hex) => { setRangeColor(hex); bubble({ rangeColor: hex }); }}
-                                                    weight={rangeWeight}
-                                                    onChangeWeight={(w) => { setRangeWeight(w); bubble({ rangeWeight: w }); }}
-                                                    pattern={rangePattern}
-                                                    onChangePattern={(p) => { setRangePattern(p); bubble({ rangePattern: p }); }}
-                                                    opacity={rangeOpacity}
-                                                    onChangeOpacity={(o) => { setRangeOpacity(o); bubble({ rangeOpacity: o }); }}
-                                                />
-                                            </Box>
-                                        </Stack>
-                                    )}
+                                    {/* Move + Range (always visible) */}
+                                    <Stack spacing={1}>
+                                        {/* MOVE */}
+                                        <Box
+                                            sx={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: 1,
+                                                minWidth: 0,
+                                            }}
+                                        >
+                                            <ColorPicker
+                                                value={movementColor ?? null}
+                                                onChange={(hex) => { setMovementColor(hex); bubble({ movementColor: hex }); }}
+                                                weight={moveWeight}
+                                                onChangeWeight={(w) => { setMoveWeight(w); bubble({ movementWeight: w }); }}
+                                                pattern={movePattern}
+                                                onChangePattern={(p) => { setMovePattern(p); bubble({ movementPattern: p }); }}
+                                                opacity={moveOpacity}
+                                                onChangeOpacity={(o) => { setMoveOpacity(o); bubble({ movementOpacity: o }); }}
+                                            />
 
+                                            <Typography sx={{ fontSize: "0.85rem", flexShrink: 0 }}>Move</Typography>
+
+                                            <Box sx={{ flex: 1, minWidth: 0 }} /> {/* spacer pushes input to the right */}
+
+                                            <CommitNumberField
+                                                size="small"
+                                                variant="outlined"
+                                                value={movement}
+                                                onCommit={(v) => { setMovement(v); bubble?.({ movement: v }); }}
+                                                sx={{
+                                                    "& .MuiOutlinedInput-root": {
+                                                        borderRadius: 0.5,
+                                                        fontSize: "0.85rem",
+                                                        height: 28,
+                                                        p: 0,
+                                                    },
+                                                }}
+                                                slotProps={{
+                                                    htmlInput: {
+                                                        inputMode: "numeric",
+                                                        pattern: "[0-9]*",
+                                                        "aria-label": "movement",
+                                                        style: {
+                                                            textAlign: "center",
+                                                            padding: "0 2px",
+                                                            width: "5ch",           // compact, scales with font; tweak if you like
+                                                            fontSize: "0.85rem",
+                                                        },
+                                                    },
+                                                }}
+                                            />
+
+                                            <Typography sx={{ fontSize: "0.8rem", color: "text.secondary", ml: 0.75, flexShrink: 0 }}>
+                                                ft
+                                            </Typography>
+                                        </Box>
+
+                                        {/* RANGE */}
+                                        <Box
+                                            sx={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: 1,
+                                                minWidth: 0,
+                                            }}
+                                        >
+                                            <ColorPicker
+                                                value={rangeColor ?? null}
+                                                onChange={(hex) => { setRangeColor(hex); bubble({ rangeColor: hex }); }}
+                                                weight={rangeWeight}
+                                                onChangeWeight={(w) => { setRangeWeight(w); bubble({ rangeWeight: w }); }}
+                                                pattern={rangePattern}
+                                                onChangePattern={(p) => { setRangePattern(p); bubble({ rangePattern: p }); }}
+                                                opacity={rangeOpacity}
+                                                onChangeOpacity={(o) => { setRangeOpacity(o); bubble({ rangeOpacity: o }); }}
+                                            />
+
+                                            <Typography sx={{ fontSize: "0.85rem", flexShrink: 0 }}>Range</Typography>
+
+                                            <Box sx={{ flex: 1, minWidth: 0 }} />
+
+                                            <CommitNumberField
+                                                size="small"
+                                                variant="outlined"
+                                                value={attackRange}
+                                                onCommit={(v) => { setAttackRange(v); bubble?.({ attackRange: v }); }}
+                                                sx={{
+                                                    "& .MuiOutlinedInput-root": {
+                                                        borderRadius: 0.5,
+                                                        fontSize: "0.85rem",
+                                                        height: 28,
+                                                        p: 0,
+                                                    },
+                                                }}
+                                                slotProps={{
+                                                    htmlInput: {
+                                                        inputMode: "numeric",
+                                                        pattern: "[0-9]*",
+                                                        "aria-label": "attack range",
+                                                        style: {
+                                                            textAlign: "center",
+                                                            padding: "0 2px",
+                                                            width: "5ch",
+                                                            fontSize: "0.85rem",
+                                                        },
+                                                    },
+                                                }}
+                                            />
+
+                                            <Typography sx={{ fontSize: "0.8rem", color: "text.secondary", ml: 0.75, flexShrink: 0 }}>
+                                                ft
+                                            </Typography>
+                                        </Box>
+                                    </Stack>
                                 </Box>
 
                                 <Divider orientation="vertical" flexItem />
 
-                                {/* Right: Distances (conditional) */}
+                                {/* Right: Distances */}
                                 {vis.distances ? (
                                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                                        <Typography sx={{ fontWeight: 700, fontSize: "0.8rem", textAlign: "center", mb: 0.75 }}>
-                                            Distances
-                                        </Typography>
-
-                                        <List dense disablePadding sx={{ px: 1, "& .MuiListItem-root": { py: 0.25 } }}>
-                                            {[
-                                                { name: "Goblin A", ft: 18 },
-                                                { name: "Orc Brute", ft: 27 },
-                                                { name: "Cultist", ft: 35 },
-                                            ].map((d) => (
-                                                <ListItem key={d.name} disableGutters sx={{ display: "flex", justifyContent: "space-between" }}>
-                                                    <Typography sx={{ fontSize: "0.75rem" }}>{d.name}</Typography>
-                                                    <Typography sx={{ fontSize: "0.75rem", color: "text.secondary" }}>{d.ft} ft</Typography>
+                                        <Stack direction="row" alignItems="center" justifyContent="center" sx={{ px: 1, py: 0.5 }}>
+                                            <Stack direction="row" alignItems="center" spacing={0.5}>
+                                                <Typography sx={{ fontWeight: 700, fontSize: "0.95rem", textAlign: "center", mb: 0.75 }}>
+                                                    Distances
+                                                </Typography>
+                                                <Tooltip title="Measured from edge to edge" enterDelay={300}>
+                                                    <InfoRounded fontSize="small" sx={{ color: "text.secondary", cursor: "help" }} />
+                                                </Tooltip>
+                                            </Stack>
+                                        </Stack>
+                                        <List dense disablePadding sx={{ px: 0, "& .MuiListItem-root": { py: 0.25 } }}>
+                                            {distances.length === 0 ? (
+                                                <ListItem disableGutters>
+                                                    <Typography sx={{ fontSize: "0.8rem", color: "text.secondary" }}>
+                                                        No other tokens found.
+                                                    </Typography>
                                                 </ListItem>
-                                            ))}
+                                            ) : (
+                                                distances.map((d) => (
+                                                    <ListItem
+                                                        key={d.id}
+                                                        disableGutters
+                                                        sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
+                                                    >
+                                                        <Typography
+                                                            sx={{
+                                                                flex: 1,
+                                                                minWidth: 0,
+                                                                overflow: "hidden",
+                                                                textOverflow: "ellipsis",
+                                                                whiteSpace: "nowrap",
+                                                                fontSize: "0.8rem",
+                                                            }}
+                                                        >
+                                                            {d.name}
+                                                        </Typography>
+                                                        <Typography
+                                                            sx={{
+                                                                flex: "0 0 35px",
+                                                                textAlign: "right",
+                                                                fontSize: "0.8rem",
+                                                                color: "text.secondary",
+                                                            }}
+                                                        >
+                                                            {d.ft < 5 ? "Touch" : `${d.ft} ft`}
+                                                        </Typography>
+                                                    </ListItem>
+                                                ))
+                                            )}
                                         </List>
                                     </Box>
                                 ) : (
@@ -812,7 +928,8 @@ export default function InitiativeRow({
                         </Box>
                     </Collapse>
                 </TableCell>
-            </TableRow >
+            </TableRow>
+
         </>
     );
 }

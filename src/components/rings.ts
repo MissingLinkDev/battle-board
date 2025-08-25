@@ -1,6 +1,7 @@
 // src/scene/rings.ts
-import OBR, { buildShape, type Item, type Shape, type Vector2, isImage } from "@owlbear-rodeo/sdk";
+import OBR, { buildShape, isImage, type Item, type Shape, type Vector2 } from "@owlbear-rodeo/sdk";
 import { getPluginId } from "../getPluginId";
+import { getGridInfo, unitsToPixels, type GridInfo } from "./utils";
 
 const RING_META = getPluginId("rings");
 
@@ -20,6 +21,27 @@ type RingMeta = {
     __ring__: true;
     [k: string]: unknown;
 };
+
+/** Compute this token's footprint DIAMETER in scene units (feet) from its snapshot. */
+function tokenDiameterFeet(token: Item, grid: GridInfo): number {
+    // Fallback: treat as 1 cell
+    const fallback = grid.unitsPerCell;
+
+    if (!isImage(token) || !token.image?.width || !token.image?.height) {
+        return fallback;
+    }
+    const dpi = token.grid?.dpi;
+    if (!dpi) return fallback; // missing authored DPI → assume 1 cell
+
+    const baseCellsW = token.image.width / dpi;
+    const baseCellsH = token.image.height / dpi;
+
+    const scaleX = Math.abs(token.scale?.x ?? 1);
+    const scaleY = Math.abs(token.scale?.y ?? 1);
+
+    const cells = Math.max(baseCellsW * scaleX, baseCellsH * scaleY) || 1;
+    return cells * grid.unitsPerCell; // feet
+}
 
 function dashFor(
     pattern: "solid" | "dash" | "dot" | undefined | null,
@@ -58,13 +80,6 @@ function ringMeta(ownerId: string, kind: RingKind, variant: RingVariant): RingMe
 export async function clearRingsFor(tokenId: string, variant?: RingVariant) {
     const rings = await OBR.scene.items.getItems((it) => isOurRing(it, tokenId, variant));
     if (rings.length) await OBR.scene.items.deleteItems(rings.map((r) => r.id));
-}
-
-/** Convert a distance in grid units (e.g., feet) to pixels based on the scene grid. */
-async function unitsToPixels(units: number): Promise<number> {
-    const [dpi, scale] = await Promise.all([OBR.scene.grid.getDpi(), OBR.scene.grid.getScale(),]);
-    const perCellUnits = scale.parsed?.multiplier ?? 5;
-    return (units / perCellUnits) * dpi;
 }
 
 /** Remove all rings created by us (any owner). */
@@ -109,34 +124,6 @@ function buildCircle(opts: {
     else builder.layer("DRAWING");
 
     return builder.build();
-}
-
-async function getTokenFeet(token: Item): Promise<number> {
-    // Scene units per cell (usually 5 ft)
-    const sceneScale = await OBR.scene.grid.getScale();
-    const perCellUnits = sceneScale.parsed?.multiplier ?? 5;
-
-    if (isImage(token) && token.grid?.dpi && token.image?.width && token.image?.height) {
-        const dpi = token.grid.dpi; // pixels per grid cell in the image
-        // Base cells from the raw image dimensions
-        const baseCellsW = token.image.width / dpi;
-        const baseCellsH = token.image.height / dpi;
-
-        // Apply any DM scaling (scale is per-axis)
-        const scaleX = Math.abs(token.scale?.x ?? 1);
-        const scaleY = Math.abs(token.scale?.y ?? 1);
-
-        const cellsW = baseCellsW * scaleX;
-        const cellsH = baseCellsH * scaleY;
-
-        // Tokens are effectively the max side in cells
-        const cells = Math.max(cellsW, cellsH) || 1;
-
-        return cells * perCellUnits; // feet
-    }
-
-    // Fallback: treat as Medium (1 cell)
-    return perCellUnits;
 }
 
 /**
@@ -201,15 +188,17 @@ export async function ensureRings(params: {
     if (!token) return;
     const center = token.position;
 
-    const tokenFeet = getTokenFeet(token);
+
+    const grid = await getGridInfo();
+    const tokenFeet = tokenDiameterFeet(token, grid);
 
     // Find any existing rings we created for this token (attached or not)
     const allRings = await OBR.scene.items.getItems((it) => isOurRing(it, tokenId, variant));
     const existingMove = allRings.find((r) => (r.metadata as any)?.kind === "move");
     const existingRange = allRings.find((r) => (r.metadata as any)?.kind === "range");
 
-    const wantMove = movement > 0 ? await unitsToPixels(movement * 2 + await tokenFeet) : 0;
-    const wantRange = attackRange > 0 ? await unitsToPixels(attackRange * 2 + await tokenFeet) : 0;
+    const wantMove = movement > 0 ? unitsToPixels(movement * 2 + tokenFeet, grid) : 0;
+    const wantRange = attackRange > 0 ? unitsToPixels(attackRange * 2 + tokenFeet, grid) : 0;
 
     const toAdd: Shape[] = [];
     const toUpdate: {
@@ -227,7 +216,7 @@ export async function ensureRings(params: {
     const toDelete: string[] = [];
 
     // Helper to see if an existing ring matches attachment mode
-    const hasAttachment = (r: Shape) => r.layer === "ATTACHMENT" && (r as any).attachedTo === tokenId;
+    const hasAttachment = (r: Shape, tokenId: string) => (r as any).attachedTo === tokenId;
 
     // Helpers to read current style from existing shapes (works across SDK versions)
     const readStrokeColor = (s: Shape): string | undefined =>
@@ -244,7 +233,7 @@ export async function ensureRings(params: {
         if (wantMove > 0) {
             if (existingMove) {
                 const wrongAttachment =
-                    moveAttached ? !hasAttachment(existingMove) : hasAttachment(existingMove);
+                    moveAttached ? !hasAttachment(existingMove, tokenId) : hasAttachment(existingMove, tokenId);
                 const existingDash = readStrokeDash(existingMove) ?? [];
                 const dashMismatch =
                     JSON.stringify(existingDash) !== JSON.stringify(moveDash ?? []);
@@ -321,7 +310,7 @@ export async function ensureRings(params: {
         if (wantRange > 0) {
             if (existingRange) {
                 const wrongAttachment =
-                    rangeAttached ? !hasAttachment(existingRange) : hasAttachment(existingRange);
+                    rangeAttached ? !hasAttachment(existingRange, tokenId) : hasAttachment(existingRange, tokenId);
 
                 const existingDash = readStrokeDash(existingRange) ?? [];
                 const dashMismatch =
