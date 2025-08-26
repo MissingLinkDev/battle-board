@@ -60,6 +60,7 @@ export default function InitiativeRow({
     onRemove,
     settings,
     tokens,
+    started,
 }: Props) {
     // ------------ Local mirrors ------------
     const [initiative, setInitiative] = useState(row.initiative);
@@ -89,6 +90,8 @@ export default function InitiativeRow({
     const lastActiveRef = useRef(row.active);
     // cancel token for in-flight ring updates
     const cancelRef = useRef({ cancelled: false });
+    //inline editing
+    const [editingField, setEditingField] = useState<null | "cur" | "max" | "temp" | "ac">(null);
 
     // ------------ Sync incoming props to local ------------
     useEffect(() => {
@@ -265,19 +268,43 @@ export default function InitiativeRow({
         };
     }, [tokens, row.id, settings?.showDistances]);
 
-    // ------------ Render ------------
-    const [menuPos, setMenuPos] = useState<{ mouseX: number; mouseY: number } | null>(null);
-    const handleContextMenuCapture = (e: React.MouseEvent) => {
-        e.preventDefault();
-        setMenuPos(null);
-        requestAnimationFrame(() => setMenuPos({ mouseX: e.clientX + 2, mouseY: e.clientY - 6 }));
+    //inline editing helpers
+    const commitAc = (v: number) => {
+        const next = Math.max(0, v);
+        setAc(next);
+        bubble({ ac: next });
+        setEditingField(null);
     };
-    const closeMenu = () => setMenuPos(null);
+
+    const applyMaxChange = (nextMaxRaw: number) => {
+        const m = Math.max(0, nextMaxRaw);
+        const prevMax = row.maxHP;
+        let nextCur = currentHP;
+
+        if (!started) {
+            const delta = m - prevMax;
+            nextCur = currentHP + delta;
+            if (nextCur < 0) nextCur = 0;
+            if (nextCur > m) nextCur = m;
+        } else {
+            if (nextCur > m) nextCur = m;
+        }
+
+        setMaxHP(m);
+        if (nextCur !== currentHP) setCurrentHP(nextCur);
+
+        const patch: Partial<InitiativeItem> = { maxHP: m };
+        if (nextCur !== currentHP) patch.currentHP = nextCur;
+        onChange?.(patch);
+
+        setEditingField(null);
+    };
 
     const keyCommit = (doCommit: () => void) => (e: React.KeyboardEvent) => {
         if (e.key === "Enter") doCommit();
-        if (e.key === "Escape") (e.currentTarget as HTMLInputElement).blur();
+        if (e.key === "Escape") setEditingField(null);
     };
+
     const clickCommit =
         (commit: () => void) =>
             (e: React.MouseEvent<HTMLInputElement> | React.TouchEvent<HTMLInputElement>) => {
@@ -287,6 +314,15 @@ export default function InitiativeRow({
                     commit();
                 }
             };
+
+    // ------------ Render ------------
+    const [menuPos, setMenuPos] = useState<{ mouseX: number; mouseY: number } | null>(null);
+    const handleContextMenuCapture = (e: React.MouseEvent) => {
+        e.preventDefault();
+        setMenuPos(null);
+        requestAnimationFrame(() => setMenuPos({ mouseX: e.clientX + 2, mouseY: e.clientY - 6 }));
+    };
+    const closeMenu = () => setMenuPos(null);
 
     return (
         <>
@@ -377,32 +413,46 @@ export default function InitiativeRow({
                 {/* AC */}
                 {vis.ac ? (
                     <TableCell width={36} align="center" onClick={(e) => e.stopPropagation()} sx={{ cursor: "default" }}>
-                        <CommitNumberField
-                            size="small"
-                            variant="outlined"
-                            value={ac}
-                            onCommit={(v) => {
-                                const next = Math.max(0, v);
-                                setAc(next);
-                                bubble({ ac: next });
-                            }}
-                            sx={inputSx}
-                            slotProps={{
-                                htmlInput: {
-                                    ...baseHtmlInput,
-                                    autoFocus: false,
-                                    onFocus: (e: any) => e.currentTarget.select(),
-                                    "aria-label": "armor class",
-                                    style: { ...baseHtmlInput.style, width: 34 },
-                                    onChange: (e: any) => {
-                                        const n = Number(e.target.value.replace(/[^\d-]/g, ""));
-                                        if (Number.isFinite(n)) setAc(n);
+                        {editingField === "ac" ? (
+                            <CommitNumberField
+                                size="small"
+                                variant="outlined"
+                                value={ac}
+                                onCommit={commitAc}
+                                onBlur={() => commitAc(ac)}
+                                onKeyDown={keyCommit(() => commitAc(ac))}
+                                sx={inputSx}
+                                slotProps={{
+                                    htmlInput: {
+                                        ...baseHtmlInput,
+                                        autoFocus: true,
+                                        onFocus: (e: any) => e.currentTarget.select(),
+                                        "aria-label": "armor class",
+                                        style: { ...baseHtmlInput.style, width: 34 },
+                                        onChange: (e: any) => {
+                                            const n = Number(e.target.value.replace(/[^\d-]/g, ""));
+                                            if (Number.isFinite(n)) setAc(n);
+                                        },
+                                        onBlur: () => commitAc(ac),
+                                        onMouseDown: clickCommit(() => commitAc(ac)),
+                                        onTouchStart: clickCommit(() => commitAc(ac)),
                                     },
-                                    onMouseDown: clickCommit(() => bubble({ ac })),
-                                    onKeyDown: keyCommit(() => bubble({ ac })),
-                                },
-                            }}
-                        />
+                                }}
+                            />
+                        ) : (
+                            <Typography
+                                component="button"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingField("ac");
+                                }}
+                                style={{ all: "unset", cursor: "text" }}
+                            >
+                                <Typography component="span" sx={{ fontSize: "0.9rem", lineHeight: 1.1 }}>
+                                    {ac}
+                                </Typography>
+                            </Typography>
+                        )}
                     </TableCell>
                 ) : null}
 
@@ -412,26 +462,131 @@ export default function InitiativeRow({
                         <TableCell width={62} align="center" onClick={(e) => e.stopPropagation()} sx={{ cursor: "default" }}>
                             <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
                                 {/* CURRENT */}
-                                <Typography component="span" sx={hpTextSx}>
-                                    {currentHP}
-                                </Typography>
+                                {editingField === "cur" ? (
+                                    <CommitNumberField
+                                        size="small"
+                                        variant="outlined"
+                                        value={currentHP}
+                                        allowMath
+                                        min={0}
+                                        max={Math.max(0, maxHP)}
+                                        onCommit={(val) => {
+                                            setCurrentHP(val);
+                                            bubble({ currentHP: val });
+                                            setEditingField(null);
+                                        }}
+                                        sx={inputSx}
+                                        slotProps={{
+                                            htmlInput: {
+                                                ...baseHtmlInput,
+                                                inputMode: "text",
+                                                pattern: undefined,
+                                                autoFocus: true,
+                                                onFocus: (e: any) => e.currentTarget.select(),
+                                                "aria-label": "current hp",
+                                                style: { ...baseHtmlInput.style, width: 34 },
+                                            },
+                                        }}
+                                    />
+                                ) : (
+                                    <Typography
+                                        component="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setEditingField("cur");
+                                        }}
+                                        style={{ all: "unset", cursor: "text" }}
+                                    >
+                                        <Typography component="span" sx={hpTextSx}>
+                                            {currentHP}
+                                        </Typography>
+                                    </Typography>
+                                )}
 
                                 <Typography component="span" sx={{ fontSize: "0.95rem", opacity: 0.85 }}>
                                     /
                                 </Typography>
 
                                 {/* MAX */}
-                                <Typography component="span" sx={hpTextSx}>
-                                    {maxHP}
-                                </Typography>
+                                {editingField === "max" ? (
+                                    <CommitNumberField
+                                        size="small"
+                                        variant="outlined"
+                                        value={maxHP}
+                                        allowMath
+                                        min={0}
+                                        onCommit={(nextMax) => applyMaxChange(nextMax)}
+                                        sx={inputSx}
+                                        slotProps={{
+                                            htmlInput: {
+                                                ...baseHtmlInput,
+                                                inputMode: "text",
+                                                pattern: undefined,
+                                                autoFocus: true,
+                                                onFocus: (e: any) => e.currentTarget.select(),
+                                                "aria-label": "max hp",
+                                                style: { ...baseHtmlInput.style, width: 34 },
+                                            },
+                                        }}
+                                    />
+                                ) : (
+                                    <Typography
+                                        component="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setEditingField("max");
+                                        }}
+                                        style={{ all: "unset", cursor: "text" }}
+                                    >
+                                        <Typography component="span" sx={hpTextSx}>
+                                            {maxHP}
+                                        </Typography>
+                                    </Typography>
+                                )}
                             </Box>
                         </TableCell>
 
                         {/* TEMP */}
                         <TableCell width={36} align="center" onClick={(e) => e.stopPropagation()} sx={{ cursor: "default" }}>
-                            <Typography component="span" sx={hpTextSx}>
-                                {tempHP || 0}
-                            </Typography>
+                            {editingField === "temp" ? (
+                                <CommitNumberField
+                                    size="small"
+                                    variant="outlined"
+                                    value={tempHP}
+                                    allowMath
+                                    min={0}
+                                    onCommit={(val) => {
+                                        setTempHP(val);
+                                        bubble({ tempHP: val });
+                                        setEditingField(null);
+                                    }}
+                                    sx={inputSx}
+                                    slotProps={{
+                                        htmlInput: {
+                                            ...baseHtmlInput,
+                                            inputMode: "text",
+                                            pattern: undefined,
+                                            autoFocus: true,
+                                            onFocus: (e: any) => e.currentTarget.select(),
+                                            "aria-label": "temp hp",
+                                            style: { ...baseHtmlInput.style, width: 34 },
+                                        },
+                                    }}
+                                />
+                            ) : (
+                                <Typography
+                                    component="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditingField("temp");
+                                    }}
+                                    style={{ all: "unset", cursor: "text" }}
+                                >
+                                    <Typography component="span" sx={hpTextSx}>
+                                        {tempHP || 0}
+                                    </Typography>
+                                </Typography>
+                            )}
                         </TableCell>
                     </>
                 ) : null}
