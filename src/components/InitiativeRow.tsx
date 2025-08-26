@@ -17,16 +17,15 @@ import MenuItem from "@mui/material/MenuItem";
 import RadarRounded from "@mui/icons-material/RadarRounded";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Checkbox from "@mui/material/Checkbox";
+import Tooltip from "@mui/material/Tooltip";
+import InfoRounded from "@mui/icons-material/InfoRounded";
 
 import type { InitiativeItem } from "./InitiativeItem";
 import { CommitNumberField } from "./CommitFields";
 import { ensureRings, clearRingsFor } from "./rings";
 import ColorPicker from "./ColorPicker";
 import type { CMToken } from "./tokens";
-import { getGridInfo, formatFeet, type DistanceMode, distanceInUnits } from "./utils";
-import Tooltip from "@mui/material/Tooltip";
-import InfoRounded from "@mui/icons-material/InfoRounded";
-
+import { getGridInfo, formatFeet, type TokenDistanceMode, distanceBetweenTokensUnits, formatDistanceLabel } from "./utils";
 
 type RowSettings = {
     showMovementRange: boolean;
@@ -60,75 +59,38 @@ export default function InitiativeRow({
     onSizeChange,
     onRemove,
     settings,
-    started,
     tokens,
 }: Props) {
-    // Local UI state for inputs
-    const [initiative, setInitiative] = useState<number>(row.initiative);
-    const [currentHP, setCurrentHP] = useState<number>(row.currentHP);
-    const [maxHP, setMaxHP] = useState<number>(row.maxHP);
-    const [tempHP, setTempHP] = useState<number>(row.tempHP);
-    const [ac, setAc] = useState<number>(row.ac);
-    const [movement, setMovement] = useState<number>(row.movement);
-    const [attackRange, setAttackRange] = useState<number>(row.attackRange);
-    const [editingField, setEditingField] = useState<null | "cur" | "max" | "temp" | "ac" | null>(null);
-    const [menuPos, setMenuPos] = useState<{ mouseX: number; mouseY: number } | null>(null);
-    const [playerCharacter, setPlayerCharacter] = useState<boolean>(!!row.playerCharacter);
-    const [movementColor, setMovementColor] = useState<string | null | undefined>(row.movementColor ?? null);
-    const [rangeColor, setRangeColor] = useState<string | null | undefined>(row.rangeColor ?? null);
+    // ------------ Local mirrors ------------
+    const [initiative, setInitiative] = useState(row.initiative);
+    const [currentHP, setCurrentHP] = useState(row.currentHP);
+    const [maxHP, setMaxHP] = useState(row.maxHP);
+    const [tempHP, setTempHP] = useState(row.tempHP);
+    const [ac, setAc] = useState(row.ac);
+    const [movement, setMovement] = useState(row.movement);
+    const [attackRange, setAttackRange] = useState(row.attackRange);
+    const [playerCharacter, setPlayerCharacter] = useState(!!row.playerCharacter);
+
+    // ring style mirrors
+    const [movementColor, setMovementColor] = useState<string | null>(row.movementColor ?? null);
+    const [rangeColor, setRangeColor] = useState<string | null>(row.rangeColor ?? null);
     const [moveWeight, setMoveWeight] = useState<number>(row.movementWeight ?? 10);
     const [movePattern, setMovePattern] = useState<"solid" | "dash">(row.movementPattern ?? "dash");
     const [moveOpacity, setMoveOpacity] = useState<number>(row.movementOpacity ?? 1);
     const [rangeWeight, setRangeWeight] = useState<number>(row.rangeWeight ?? 10);
     const [rangePattern, setRangePattern] = useState<"solid" | "dash">(row.rangePattern ?? "dash");
     const [rangeOpacity, setRangeOpacity] = useState<number>(row.rangeOpacity ?? 1);
+
+    // distances + dm preview
     const [distances, setDistances] = useState<{ id: string; name: string; ft: number }[]>([]);
+    const [dmPreview, setDmPreview] = useState(!!row.dmPreview);
 
+    // single reference for "did active state change?"
+    const lastActiveRef = useRef(row.active);
+    // cancel token for in-flight ring updates
+    const cancelRef = useRef({ cancelled: false });
 
-    const [dmPreview, setDmPreview] = useState(false);
-    const prevActiveRef = useRef(row.active);
-
-    const commitAc = (v: number) => {
-        const next = Math.max(0, v);
-        setAc(next);
-        bubble({ ac: next });
-        setEditingField(null);
-    };
-
-    const applyMaxChange = (nextMaxRaw: number) => {
-        const m = Math.max(0, nextMaxRaw);
-        const prevMax = row.maxHP;               // stable previous value for delta calc
-        let nextCur = currentHP;
-
-        if (!started) {
-            const delta = m - prevMax;
-            nextCur = currentHP + delta;
-            // clamp to [0, m]
-            if (nextCur < 0) nextCur = 0;
-            if (nextCur > m) nextCur = m;
-        } else {
-            // in combat: only clamp down if current > new max
-            if (nextCur > m) nextCur = m;
-        }
-
-        setMaxHP(m);
-        if (nextCur !== currentHP) setCurrentHP(nextCur);
-
-        const patch: Partial<InitiativeItem> = { maxHP: m };
-        if (nextCur !== currentHP) patch.currentHP = nextCur;
-        onChange?.(patch);
-
-        setEditingField(null);
-    };
-
-    // small helper so Enter commits, Esc cancels, blur commits
-    const keyCommit = (doCommit: () => void) => (e: React.KeyboardEvent) => {
-        if (e.key === "Enter") doCommit();
-        if (e.key === "Escape") setEditingField(null);
-    };
-
-
-    // Sync local when parent row changes
+    // ------------ Sync incoming props to local ------------
     useEffect(() => {
         setInitiative(row.initiative);
         setCurrentHP(row.currentHP);
@@ -137,7 +99,8 @@ export default function InitiativeRow({
         setAc(row.ac);
         setMovement(row.movement);
         setAttackRange(row.attackRange);
-        setPlayerCharacter(!!row.playerCharacter); // NEW
+        setPlayerCharacter(!!row.playerCharacter);
+
         setMovementColor(row.movementColor ?? null);
         setRangeColor(row.rangeColor ?? null);
         setMoveWeight(row.movementWeight ?? 10);
@@ -146,73 +109,29 @@ export default function InitiativeRow({
         setRangeWeight(row.rangeWeight ?? 10);
         setRangePattern(row.rangePattern ?? "dash");
         setRangeOpacity(row.rangeOpacity ?? 1);
-    }, [
-        row.id,
-        row.initiative,
-        row.currentHP,
-        row.maxHP,
-        row.tempHP,
-        row.ac,
-        row.movement,
-        row.attackRange,
-        row.playerCharacter,
-        row.movementColor,
-        row.rangeColor,
-        row.movementWeight,
-        row.movementPattern,
-        row.movementOpacity,
-        row.rangeWeight,
-        row.rangePattern,
-        row.rangeOpacity
-    ]);
 
-    // Style helpers
-    const inputSx = useMemo(
-        () => ({
-            "& .MuiOutlinedInput-root": {
-                borderRadius: 0.25,
-                height: 28,
-                p: 0,
-            },
-            "& .MuiOutlinedInput-input": {
-                fontSize: "0.8rem",  // match NAME
-                lineHeight: 1.25,
-                py: 0,
-            },
-        }),
-        []
-    );
+        setDmPreview(!!row.dmPreview);
+    }, [row]);
 
-    const baseHtmlInput = useMemo(
-        () => ({
-            inputMode: "numeric",
-            pattern: "[0-9]*",
-            style: {
-                textAlign: "center" as const,
-                padding: "0 1px",
-                fontSize: "0.8rem",  // match NAME
-            },
-        }),
-        []
-    );
-
-    const hpTextSx = useMemo(
-        () => ({ fontSize: "0.8rem", fontWeight: 600, lineHeight: 1.25 }),
-        []
-    );
-
+    // ------------ Small helpers ------------
     const bubble = (draft: Partial<InitiativeItem>) => onChange?.(draft);
 
-
-    const clickCommit =
-        (commit: () => void) =>
-            (e: React.MouseEvent<HTMLInputElement> | React.TouchEvent<HTMLInputElement>) => {
-                const el = e.currentTarget as HTMLInputElement;
-                if (document.activeElement === el) {
-                    e.preventDefault(); // don't move caret
-                    commit();
-                }
-            };
+    const inputSx = useMemo(
+        () => ({
+            "& .MuiOutlinedInput-root": { borderRadius: 0.25, height: 28, p: 0 },
+            "& .MuiOutlinedInput-input": { fontSize: "0.8rem", lineHeight: 1.25, py: 0 },
+        }),
+        []
+    );
+    const baseHtmlInput = useMemo(
+        () => ({
+            inputMode: "numeric" as const,
+            pattern: "[0-9]*",
+            style: { textAlign: "center" as const, padding: "0 1px", fontSize: "0.8rem" },
+        }),
+        []
+    );
+    const hpTextSx = useMemo(() => ({ fontSize: "0.8rem", fontWeight: 600, lineHeight: 1.25 }), []);
 
     const vis = {
         ac: settings?.showAC ?? true,
@@ -224,105 +143,93 @@ export default function InitiativeRow({
         dmr: settings?.showDMR ?? true,
     };
 
-    const handleContextMenuCapture = (e: React.MouseEvent) => {
-        e.preventDefault(); // stop native context menu (esp. on inputs)
-        // close then reopen at the new coords to handle repeated right-clicks
-        setMenuPos(null);
-        requestAnimationFrame(() => {
-            setMenuPos({ mouseX: e.clientX + 2, mouseY: e.clientY - 6 });
-        });
+    // ------------ DM PREVIEW: single effect, one call ------------
+    useEffect(() => {
+        // cancel any previous async run
+        cancelRef.current.cancelled = true;
+        cancelRef.current = { cancelled: false };
 
-        // preserve selection on Safari/Firefox (optional nicety)
-        const sel = document.getSelection();
-        if (sel && sel.rangeCount > 0) {
-            const range = sel.getRangeAt(0);
-            setTimeout(() => sel.addRange(range));
-        }
+        // nothing to do if toggle is off
+        if (!dmPreview) return;
+
+        // only preview for this token; do not enforce global exclusivity here
+        // compute "active changed" once
+        const activeChanged = row.active !== lastActiveRef.current;
+        lastActiveRef.current = row.active;
+
+        (async () => {
+            try {
+                // coalesce both rings into one ensure call (no more "only: move/range" two-step)
+                await ensureRings({
+                    tokenId: row.id,
+                    movement,
+                    attackRange,
+                    moveAttached: false,
+                    rangeAttached: true,
+                    visible: false,
+                    variant: "dm",
+                    movementColor,
+                    rangeColor,
+                    movementWeight: moveWeight,
+                    rangeWeight,
+                    movementPattern: movePattern,
+                    rangePattern,
+                    movementOpacity: moveOpacity,
+                    rangeOpacity,
+                    forceRecenter: activeChanged,
+                });
+            } catch (e) {
+                console.error(e);
+            }
+        })();
+
+        // cleanup: if the effect re-runs or unmounts and the toggle is off, remove our rings
+        return () => {
+            // if we’re turning preview OFF (next run or unmount), clear just our token’s dm rings
+            if (!dmPreview) {
+                clearRingsFor(row.id, "dm").catch(() => { });
+            }
+        };
+        // trigger on any relevant change
+    }, [
+        dmPreview,
+        row.id,
+        row.active,
+        movement,
+        attackRange,
+        movementColor,
+        rangeColor,
+        moveWeight,
+        rangeWeight,
+        movePattern,
+        rangePattern,
+        moveOpacity,
+        rangeOpacity,
+    ]);
+
+    // Always clear this row's DM rings when unmounting or token id changes
+    useEffect(() => {
+        return () => {
+            clearRingsFor(row.id, "dm").catch(() => { });
+        };
+    }, [row.id]);
+
+    const toggleDmPreview = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        // optimistic local toggle
+        const next = !dmPreview;
+        setDmPreview(next);
+        bubble({ dmPreview: next });
+        // when turning off, be explicit about clearing
+        if (!next) await clearRingsFor(row.id, "dm").catch(() => { });
     };
 
-    const closeMenu = () => setMenuPos(null);
-
-    useEffect(() => {
-        const activeChanged = row.active !== prevActiveRef.current;
-        prevActiveRef.current = row.active;
-
-        if (!dmPreview) return;
-        console.log("calling ensure rings on row active")
-        ensureRings({
-            tokenId: row.id,
-            movement,
-            attackRange,
-            moveAttached: false,
-            rangeAttached: true,
-            visible: false,   // DM-only
-            variant: "dm",
-            movementColor,
-            movementWeight: moveWeight,
-            movementPattern: movePattern,
-            movementOpacity: moveOpacity,
-            forceRecenter: activeChanged,
-            only: "move"
-        }).catch(console.error);
-    }, [dmPreview, movement, movementColor, moveWeight, movePattern, moveOpacity, row.id, row.active]);
-
-    useEffect(() => {
-        const activeChanged = row.active !== prevActiveRef.current;
-        prevActiveRef.current = row.active;
-
-        if (!dmPreview) return;
-        console.log("calling ensure rings on row active")
-        ensureRings({
-            tokenId: row.id,
-            movement,
-            attackRange,
-            moveAttached: false,
-            rangeAttached: true,
-            visible: false,   // DM-only
-            variant: "dm",
-            rangeColor,
-            rangeWeight,
-            rangePattern,
-            rangeOpacity,
-            forceRecenter: activeChanged,
-            only: "range"
-        }).catch(console.error);
-    }, [dmPreview, attackRange, rangeColor, rangeWeight, rangePattern, rangeOpacity, row.id, row.active]);
-
-    useEffect(() => () => { clearRingsFor(row.id, "dm").catch(() => { }); }, [row.id]);
-
-    const toggleDmPreview = async () => {
-        if (!dmPreview) {
-            // turn ON
-            await ensureRings({
-                tokenId: row.id,
-                movement,
-                attackRange,
-                moveAttached: false,
-                rangeAttached: true,
-                visible: false,
-                variant: "dm",
-                movementColor, rangeColor,
-                movementWeight: row.movementWeight ?? 10,
-                rangeWeight: row.rangeWeight ?? 10,
-                movementPattern: row.movementPattern ?? "dash",
-                rangePattern: row.rangePattern ?? "dash",
-                movementOpacity: row.movementOpacity ?? 1,
-                rangeOpacity: row.rangeOpacity ?? 1,
-            });
-            setDmPreview(true);
-        } else {
-            // turn OFF
-            await clearRingsFor(row.id, "dm");
-            setDmPreview(false);
-        }
-    };
-
+    // ------------ Distances list ------------
     useEffect(() => {
         let cancelled = false;
 
         (async () => {
             if (!settings?.showDistances) {
-                // If the UI has distances hidden, avoid doing the work
                 setDistances([]);
                 return;
             }
@@ -334,30 +241,18 @@ export default function InitiativeRow({
             }
 
             const grid = await getGridInfo();
-            // choose how to measure: "center" or "edge"
-            // wire this to your settings if you have one; default to "edge"
-            const mode: DistanceMode = (settings as any)?.distanceMode ?? "edge";
-            console.log("mode", mode);
-            // Show distances to all OTHER visible tokens in the CHARACTER/MOUNT layers
-            // (Your tokens list already filters to CHARACTER/MOUNT; we skip invisible tokens by default)
+            const modeSetting = (settings as any)?.distanceMode ?? "edge";
+            const tokenMode: TokenDistanceMode = modeSetting === "edge" ? "box" : "center";
+
             const list = tokens
                 .filter((t) => t.id !== row.id && t.visible !== false)
                 .map((t) => {
-                    const raw = distanceInUnits(
-                        me.position,
-                        t.position,
-                        grid,
-                        mode,
-                        // only needed in edge mode
-                        mode === "edge"
-                            ? { radiusAUnits: me.radiusFeet, radiusBUnits: t.radiusFeet }
-                            : undefined
-                    );
-
+                    const raw = distanceBetweenTokensUnits(me, t, grid, tokenMode); // feet
                     return {
                         id: t.id,
                         name: t.name || "(unnamed)",
-                        ft: formatFeet(raw),
+                        ft: formatFeet(raw),          // numeric, good for sorting/comparisons
+                        text: formatDistanceLabel(raw) // "Touch" if <5, else "N ft"
                     };
                 })
                 .sort((a, b) => a.ft - b.ft);
@@ -369,6 +264,29 @@ export default function InitiativeRow({
             cancelled = true;
         };
     }, [tokens, row.id, settings?.showDistances]);
+
+    // ------------ Render ------------
+    const [menuPos, setMenuPos] = useState<{ mouseX: number; mouseY: number } | null>(null);
+    const handleContextMenuCapture = (e: React.MouseEvent) => {
+        e.preventDefault();
+        setMenuPos(null);
+        requestAnimationFrame(() => setMenuPos({ mouseX: e.clientX + 2, mouseY: e.clientY - 6 }));
+    };
+    const closeMenu = () => setMenuPos(null);
+
+    const keyCommit = (doCommit: () => void) => (e: React.KeyboardEvent) => {
+        if (e.key === "Enter") doCommit();
+        if (e.key === "Escape") (e.currentTarget as HTMLInputElement).blur();
+    };
+    const clickCommit =
+        (commit: () => void) =>
+            (e: React.MouseEvent<HTMLInputElement> | React.TouchEvent<HTMLInputElement>) => {
+                const el = e.currentTarget as HTMLInputElement;
+                if (document.activeElement === el) {
+                    e.preventDefault();
+                    commit();
+                }
+            };
 
     return (
         <>
@@ -384,13 +302,13 @@ export default function InitiativeRow({
                     cursor: "context-menu",
                     "& > td, & > th": (theme) => ({
                         borderBottom: expanded ? "none" : `1px solid ${theme.palette.divider}`,
-                    }),     // ← important
+                    }),
                     "& td": { py: 0.5, px: 0.5 },
                     borderLeft: row.active ? "3px solid" : "3px solid transparent",
                     borderLeftColor: row.active ? "success.light" : "transparent",
                 }}
             >
-                {/* Expand chevron (toggles expansion only) */}
+                {/* Expand chevron */}
                 <TableCell width={18} onClick={(e) => e.stopPropagation()}>
                     <IconButton
                         aria-label="expand row"
@@ -401,11 +319,7 @@ export default function InitiativeRow({
                         }}
                         sx={{ p: 0.25 }}
                     >
-                        {expanded ? (
-                            <KeyboardArrowUp sx={{ fontSize: "1rem" }} />
-                        ) : (
-                            <KeyboardArrowDown sx={{ fontSize: "1rem" }} />
-                        )}
+                        {expanded ? <KeyboardArrowUp sx={{ fontSize: "1rem" }} /> : <KeyboardArrowDown sx={{ fontSize: "1rem" }} />}
                     </IconButton>
                 </TableCell>
 
@@ -437,33 +351,13 @@ export default function InitiativeRow({
                 </TableCell>
 
                 {/* NAME */}
-                <TableCell
-                    sx={{
-                        fontWeight: 600,
-                        fontSize: "0.8rem",
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                    }}
-                >
-                    <Box
-                        sx={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 0.5,
-                            minWidth: 0,
-                            maxWidth: "100%",
-                        }}
-                    >
+                <TableCell sx={{ fontWeight: 600, fontSize: "0.8rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, minWidth: 0, maxWidth: "100%" }}>
                         {row.visible === false && (
-                            <>
-                                <Box sx={{ width: 12, height: 12, lineHeight: 0 }}>
-                                    <VisibilityOffRounded sx={{ fontSize: 12, display: "block", opacity: 0.7 }} />
-                                </Box>
-                                <Box /> {/* tiny gap */}
-                            </>
+                            <Box sx={{ width: 12, height: 12, lineHeight: 0 }}>
+                                <VisibilityOffRounded sx={{ fontSize: 12, display: "block", opacity: 0.7 }} />
+                            </Box>
                         )}
-
                         <Box
                             component="span"
                             sx={{
@@ -480,190 +374,73 @@ export default function InitiativeRow({
                     </Box>
                 </TableCell>
 
-
                 {/* AC */}
                 {vis.ac ? (
                     <TableCell width={36} align="center" onClick={(e) => e.stopPropagation()} sx={{ cursor: "default" }}>
-                        {editingField === "ac" ? (
-                            <CommitNumberField
-                                size="small"
-                                variant="outlined"
-                                value={ac}
-                                onCommit={commitAc}
-                                onBlur={() => commitAc(ac)}
-                                onKeyDown={keyCommit(() => commitAc(ac))}
-                                sx={inputSx}
-                                slotProps={{
-                                    htmlInput: {
-                                        ...baseHtmlInput,
-                                        autoFocus: true,
-                                        onFocus: (e: any) => e.currentTarget.select(),
-                                        "aria-label": "armor class",
-                                        style: { ...baseHtmlInput.style, width: 34 },
-                                        // live-parse as you type
-                                        onChange: (e: any) => {
-                                            const n = Number(e.target.value.replace(/[^\d-]/g, ""));
-                                            if (Number.isFinite(n)) setAc(n);
-                                        },
-                                        // commit on click-away
-                                        onBlur: () => commitAc(ac),
-                                        // second-click commits immediately (optional nicety)
-                                        onMouseDown: clickCommit(() => commitAc(ac)),
-                                        onTouchStart: clickCommit(() => commitAc(ac)),
+                        <CommitNumberField
+                            size="small"
+                            variant="outlined"
+                            value={ac}
+                            onCommit={(v) => {
+                                const next = Math.max(0, v);
+                                setAc(next);
+                                bubble({ ac: next });
+                            }}
+                            sx={inputSx}
+                            slotProps={{
+                                htmlInput: {
+                                    ...baseHtmlInput,
+                                    autoFocus: false,
+                                    onFocus: (e: any) => e.currentTarget.select(),
+                                    "aria-label": "armor class",
+                                    style: { ...baseHtmlInput.style, width: 34 },
+                                    onChange: (e: any) => {
+                                        const n = Number(e.target.value.replace(/[^\d-]/g, ""));
+                                        if (Number.isFinite(n)) setAc(n);
                                     },
-                                }}
-                            />
-                        ) : (
-                            <Typography
-                                component="button"
-                                onClick={(e) => { e.stopPropagation(); setEditingField("ac"); }}
-                                style={{ all: "unset", cursor: "text" }}
-                            >
-                                <Typography component="span" sx={{ fontSize: "0.9rem", lineHeight: 1.1 }}>
-                                    {ac}
-                                </Typography>
-                            </Typography>
-                        )}
+                                    onMouseDown: clickCommit(() => bubble({ ac })),
+                                    onKeyDown: keyCommit(() => bubble({ ac })),
+                                },
+                            }}
+                        />
                     </TableCell>
                 ) : null}
 
-                {/* HP (combined) */}
+                {/* HP */}
                 {vis.hp ? (
                     <>
                         <TableCell width={62} align="center" onClick={(e) => e.stopPropagation()} sx={{ cursor: "default" }}>
                             <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
                                 {/* CURRENT */}
-                                {editingField === "cur" ? (
-                                    <CommitNumberField
-                                        size="small"
-                                        variant="outlined"
-                                        value={currentHP}
-                                        allowMath
-                                        min={0}
-                                        max={Math.max(0, maxHP)}
-                                        onCommit={(val) => {
-                                            setCurrentHP(val);
-                                            bubble({ currentHP: val });
-                                            setEditingField(null)
-                                        }}
-                                        sx={inputSx}
-                                        slotProps={{
-                                            htmlInput: {
-                                                ...baseHtmlInput,
-                                                inputMode: "text",
-                                                pattern: undefined,
-                                                autoFocus: true,
-                                                onFocus: (e: any) => e.currentTarget.select(),
-                                                "aria-label": "current hp",
-                                                style: { ...baseHtmlInput.style, width: 34 },
-                                                // live-parse as you type
+                                <Typography component="span" sx={hpTextSx}>
+                                    {currentHP}
+                                </Typography>
 
-                                            },
-                                        }}
-                                    />
-                                ) : (
-                                    <Typography
-                                        component="button"
-                                        onClick={(e) => { e.stopPropagation(); setEditingField("cur"); }}
-                                        style={{ all: "unset", cursor: "text" }}
-                                    >
-                                        <Typography component="span" sx={hpTextSx}>
-                                            {currentHP}
-                                        </Typography>
-                                    </Typography>
-                                )}
-
-                                <Typography component="span" sx={{ fontSize: "0.95rem", opacity: 0.85 }}>/</Typography>
+                                <Typography component="span" sx={{ fontSize: "0.95rem", opacity: 0.85 }}>
+                                    /
+                                </Typography>
 
                                 {/* MAX */}
-                                {editingField === "max" ? (
-                                    <CommitNumberField
-                                        size="small"
-                                        variant="outlined"
-                                        value={maxHP}
-                                        allowMath
-                                        min={0}
-                                        onCommit={(nextMax) => applyMaxChange(nextMax)}
-                                        sx={inputSx}
-                                        slotProps={{
-                                            htmlInput: {
-                                                ...baseHtmlInput,
-                                                inputMode: "text",
-                                                pattern: undefined,
-                                                autoFocus: true,
-                                                onFocus: (e: any) => e.currentTarget.select(),
-                                                "aria-label": "current hp",
-                                                style: { ...baseHtmlInput.style, width: 34 },
-                                                // live-parse as you type
-
-                                            },
-                                        }}
-                                    />
-                                ) : (
-                                    <Typography
-                                        component="button"
-                                        onClick={(e) => { e.stopPropagation(); setEditingField("max"); }}
-                                        style={{ all: "unset", cursor: "text" }}
-                                    >
-                                        <Typography component="span" sx={hpTextSx}>
-                                            {maxHP}
-                                        </Typography>
-                                    </Typography>
-                                )}
+                                <Typography component="span" sx={hpTextSx}>
+                                    {maxHP}
+                                </Typography>
                             </Box>
                         </TableCell>
 
                         {/* TEMP */}
                         <TableCell width={36} align="center" onClick={(e) => e.stopPropagation()} sx={{ cursor: "default" }}>
-                            {/* TEMP */}
-                            {editingField === "temp" ? (
-                                <CommitNumberField
-                                    size="small"
-                                    variant="outlined"
-                                    value={tempHP}
-                                    allowMath
-                                    min={0}
-                                    onCommit={(val) => {
-                                        setTempHP(val);
-                                        bubble({ tempHP: val });
-                                        setEditingField(null)
-                                    }}
-                                    sx={inputSx}
-                                    slotProps={{
-                                        htmlInput: {
-                                            ...baseHtmlInput,
-                                            inputMode: "text",
-                                            pattern: undefined,
-                                            autoFocus: true,
-                                            onFocus: (e: any) => e.currentTarget.select(),
-                                            "aria-label": "current hp",
-                                            style: { ...baseHtmlInput.style, width: 34 },
-                                            // live-parse as you type
-
-                                        },
-                                    }}
-                                />
-                            ) : (
-                                <Typography
-                                    component="button"
-                                    onClick={(e) => { e.stopPropagation(); setEditingField("temp"); }}
-                                    style={{ all: "unset", cursor: "text" }}
-                                >
-                                    <Typography component="span" sx={hpTextSx}>
-                                        {tempHP || 0}
-                                    </Typography>
-                                </Typography>
-                            )}
+                            <Typography component="span" sx={hpTextSx}>
+                                {tempHP || 0}
+                            </Typography>
                         </TableCell>
+                    </>
+                ) : null}
 
-                    </>) : null}
-                {vis.dmr === true ? (
+                {/* DM PREVIEW TOGGLE */}
+                {vis.dmr ? (
                     <TableCell width={24} align="center" onClick={(e) => e.stopPropagation()}>
                         <Box
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                toggleDmPreview();
-                            }}
+                            onClick={toggleDmPreview}
                             sx={{
                                 width: 18,
                                 height: 18,
@@ -675,16 +452,18 @@ export default function InitiativeRow({
                                 color: dmPreview ? "primary.main" : "text.secondary",
                             }}
                             aria-label="DM rings"
+                            role="switch"
+                            aria-checked={dmPreview}
                         >
                             <RadarRounded sx={{ fontSize: 18, display: "block" }} />
                         </Box>
                     </TableCell>
                 ) : null}
-            </TableRow >
-            {/* --- Right-click menu --- */}
-            < Menu
-                open={!!menuPos
-                }
+            </TableRow>
+
+            {/* Context menu */}
+            <Menu
+                open={!!menuPos}
                 onClose={closeMenu}
                 anchorReference="anchorPosition"
                 anchorPosition={menuPos ? { top: menuPos.mouseY, left: menuPos.mouseX } : undefined}
@@ -692,39 +471,30 @@ export default function InitiativeRow({
                 <MenuItem
                     onClick={() => {
                         closeMenu();
-                        onRemove?.(row.id); // delegate to parent
+                        onRemove?.(row.id);
                     }}
                 >
                     Remove
                 </MenuItem>
-            </Menu >
+            </Menu>
+
             {/* Expanded panel */}
             <TableRow
                 sx={{
                     "& > td": (theme) => ({
                         paddingTop: 0,
                         paddingBottom: 0,
-                        // only show a separator when open
                         borderBottom: expanded ? `1px solid ${theme.palette.divider}` : "none",
                     }),
                 }}
             >
                 <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={7}>
-                    <Collapse
-                        in={!!expanded}
-                        timeout="auto"
-                        unmountOnExit
-                        onEntered={onSizeChange}
-                        onExited={onSizeChange}
-                        onEntering={onSizeChange}
-                    >
+                    <Collapse in={!!expanded} timeout="auto" unmountOnExit onEntered={onSizeChange} onExited={onSizeChange} onEntering={onSizeChange}>
                         <Box sx={{ px: 1, pb: 1 }}>
                             <Stack direction="row" spacing={1.5} alignItems="stretch">
                                 {/* Left: Overlays */}
                                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                                    <Typography
-                                        sx={{ fontWeight: 700, fontSize: "0.95rem", textAlign: "center", mb: 0.75 }}
-                                    >
+                                    <Typography sx={{ fontWeight: 700, fontSize: "0.95rem", textAlign: "center", mb: 0.75 }}>
                                         Overlays
                                     </Typography>
 
@@ -747,120 +517,107 @@ export default function InitiativeRow({
                                         />
                                     </Box>
 
-                                    {/* Move + Range (always visible) */}
                                     <Stack spacing={1}>
                                         {/* MOVE */}
-                                        <Box
-                                            sx={{
-                                                display: "flex",
-                                                alignItems: "center",
-                                                gap: 1,
-                                                minWidth: 0,
-                                            }}
-                                        >
+                                        <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
                                             <ColorPicker
-                                                value={movementColor ?? null}
-                                                onChange={(hex) => { setMovementColor(hex); bubble({ movementColor: hex }); }}
+                                                value={movementColor}
+                                                onChange={(hex) => {
+                                                    setMovementColor(hex);
+                                                    bubble({ movementColor: hex });
+                                                }}
                                                 weight={moveWeight}
-                                                onChangeWeight={(w) => { setMoveWeight(w); bubble({ movementWeight: w }); }}
+                                                onChangeWeight={(w) => {
+                                                    setMoveWeight(w);
+                                                    bubble({ movementWeight: w });
+                                                }}
                                                 pattern={movePattern}
-                                                onChangePattern={(p) => { setMovePattern(p); bubble({ movementPattern: p }); }}
+                                                onChangePattern={(p) => {
+                                                    setMovePattern(p);
+                                                    bubble({ movementPattern: p });
+                                                }}
                                                 opacity={moveOpacity}
-                                                onChangeOpacity={(o) => { setMoveOpacity(o); bubble({ movementOpacity: o }); }}
+                                                onChangeOpacity={(o) => {
+                                                    setMoveOpacity(o);
+                                                    bubble({ movementOpacity: o });
+                                                }}
                                             />
 
-                                            <Typography sx={{ fontSize: "0.85rem", flexShrink: 0 }}>Move</Typography>
-
-                                            <Box sx={{ flex: 1, minWidth: 0 }} /> {/* spacer pushes input to the right */}
+                                            <Typography sx={{ fontSize: "0.85rem", flexShrink: 0 }}>Movement</Typography>
+                                            <Box sx={{ flex: 1, minWidth: 0 }} />
 
                                             <CommitNumberField
                                                 size="small"
                                                 variant="outlined"
                                                 value={movement}
-                                                onCommit={(v) => { setMovement(v); bubble?.({ movement: v }); }}
+                                                onCommit={(v) => {
+                                                    setMovement(v);
+                                                    bubble({ movement: v });
+                                                }}
                                                 sx={{
-                                                    "& .MuiOutlinedInput-root": {
-                                                        borderRadius: 0.5,
-                                                        fontSize: "0.85rem",
-                                                        height: 28,
-                                                        p: 0,
-                                                    },
+                                                    "& .MuiOutlinedInput-root": { borderRadius: 0.5, fontSize: "0.85rem", height: 28, p: 0 },
                                                 }}
                                                 slotProps={{
                                                     htmlInput: {
                                                         inputMode: "numeric",
                                                         pattern: "[0-9]*",
                                                         "aria-label": "movement",
-                                                        style: {
-                                                            textAlign: "center",
-                                                            padding: "0 2px",
-                                                            width: "5ch",           // compact, scales with font; tweak if you like
-                                                            fontSize: "0.85rem",
-                                                        },
+                                                        style: { textAlign: "center", padding: "0 2px", width: "5ch", fontSize: "0.85rem" },
                                                     },
                                                 }}
                                             />
-
-                                            <Typography sx={{ fontSize: "0.8rem", color: "text.secondary", ml: 0.75, flexShrink: 0 }}>
-                                                ft
-                                            </Typography>
+                                            <Typography sx={{ fontSize: "0.8rem", color: "text.secondary", ml: 0.75, flexShrink: 0 }}>ft</Typography>
                                         </Box>
 
                                         {/* RANGE */}
-                                        <Box
-                                            sx={{
-                                                display: "flex",
-                                                alignItems: "center",
-                                                gap: 1,
-                                                minWidth: 0,
-                                            }}
-                                        >
+                                        <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
                                             <ColorPicker
-                                                value={rangeColor ?? null}
-                                                onChange={(hex) => { setRangeColor(hex); bubble({ rangeColor: hex }); }}
+                                                value={rangeColor}
+                                                onChange={(hex) => {
+                                                    setRangeColor(hex);
+                                                    bubble({ rangeColor: hex });
+                                                }}
                                                 weight={rangeWeight}
-                                                onChangeWeight={(w) => { setRangeWeight(w); bubble({ rangeWeight: w }); }}
+                                                onChangeWeight={(w) => {
+                                                    setRangeWeight(w);
+                                                    bubble({ rangeWeight: w });
+                                                }}
                                                 pattern={rangePattern}
-                                                onChangePattern={(p) => { setRangePattern(p); bubble({ rangePattern: p }); }}
+                                                onChangePattern={(p) => {
+                                                    setRangePattern(p);
+                                                    bubble({ rangePattern: p });
+                                                }}
                                                 opacity={rangeOpacity}
-                                                onChangeOpacity={(o) => { setRangeOpacity(o); bubble({ rangeOpacity: o }); }}
+                                                onChangeOpacity={(o) => {
+                                                    setRangeOpacity(o);
+                                                    bubble({ rangeOpacity: o });
+                                                }}
                                             />
 
-                                            <Typography sx={{ fontSize: "0.85rem", flexShrink: 0 }}>Range</Typography>
-
+                                            <Typography sx={{ fontSize: "0.85rem", flexShrink: 0 }}>Atk Range</Typography>
                                             <Box sx={{ flex: 1, minWidth: 0 }} />
 
                                             <CommitNumberField
                                                 size="small"
                                                 variant="outlined"
                                                 value={attackRange}
-                                                onCommit={(v) => { setAttackRange(v); bubble?.({ attackRange: v }); }}
+                                                onCommit={(v) => {
+                                                    setAttackRange(v);
+                                                    bubble({ attackRange: v });
+                                                }}
                                                 sx={{
-                                                    "& .MuiOutlinedInput-root": {
-                                                        borderRadius: 0.5,
-                                                        fontSize: "0.85rem",
-                                                        height: 28,
-                                                        p: 0,
-                                                    },
+                                                    "& .MuiOutlinedInput-root": { borderRadius: 0.5, fontSize: "0.85rem", height: 28, p: 0 },
                                                 }}
                                                 slotProps={{
                                                     htmlInput: {
                                                         inputMode: "numeric",
                                                         pattern: "[0-9]*",
                                                         "aria-label": "attack range",
-                                                        style: {
-                                                            textAlign: "center",
-                                                            padding: "0 2px",
-                                                            width: "5ch",
-                                                            fontSize: "0.85rem",
-                                                        },
+                                                        style: { textAlign: "center", padding: "0 2px", width: "5ch", fontSize: "0.85rem" },
                                                     },
                                                 }}
                                             />
-
-                                            <Typography sx={{ fontSize: "0.8rem", color: "text.secondary", ml: 0.75, flexShrink: 0 }}>
-                                                ft
-                                            </Typography>
+                                            <Typography sx={{ fontSize: "0.8rem", color: "text.secondary", ml: 0.75, flexShrink: 0 }}>ft</Typography>
                                         </Box>
                                     </Stack>
                                 </Box>
@@ -875,7 +632,7 @@ export default function InitiativeRow({
                                                 <Typography sx={{ fontWeight: 700, fontSize: "0.95rem", textAlign: "center", mb: 0.75 }}>
                                                     Distances
                                                 </Typography>
-                                                <Tooltip title="Measured from edge to edge" enterDelay={300}>
+                                                <Tooltip title="Measured from edge to edge; attack range must be greater than distance." enterDelay={300}>
                                                     <InfoRounded fontSize="small" sx={{ color: "text.secondary", cursor: "help" }} />
                                                 </Tooltip>
                                             </Stack>
@@ -883,17 +640,11 @@ export default function InitiativeRow({
                                         <List dense disablePadding sx={{ px: 0, "& .MuiListItem-root": { py: 0.25 } }}>
                                             {distances.length === 0 ? (
                                                 <ListItem disableGutters>
-                                                    <Typography sx={{ fontSize: "0.8rem", color: "text.secondary" }}>
-                                                        No other tokens found.
-                                                    </Typography>
+                                                    <Typography sx={{ fontSize: "0.8rem", color: "text.secondary" }}>No other tokens found.</Typography>
                                                 </ListItem>
                                             ) : (
                                                 distances.map((d) => (
-                                                    <ListItem
-                                                        key={d.id}
-                                                        disableGutters
-                                                        sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
-                                                    >
+                                                    <ListItem key={d.id} disableGutters sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                                                         <Typography
                                                             sx={{
                                                                 flex: 1,
@@ -929,7 +680,6 @@ export default function InitiativeRow({
                     </Collapse>
                 </TableCell>
             </TableRow>
-
         </>
     );
 }

@@ -1,5 +1,6 @@
 // utils.ts
 import type { InitiativeItem } from "./InitiativeItem";
+import type { CMToken } from "./tokens";
 import OBR from "@owlbear-rodeo/sdk";
 
 export type GridInfo = { dpi: number; unitsPerCell: number };
@@ -32,14 +33,94 @@ export function formatFeet(n: number): number {
     return Math.round(n);
 }
 
+/** UI label helper: "<5 ft" => "Touch", else "N ft" (rounded). */
+export function formatDistanceLabel(feet: number): string {
+    if (feet < 5) return "Touch";
+    return `${Math.round(feet)} ft`;
+}
+
+/* ------------------------------------------------------------------ */
+/*                  BOX EDGE-TO-EDGE DISTANCE (NEW)                   */
+/* ------------------------------------------------------------------ */
+
+export type BoxPx = {
+    cx: number;        // center x in scene pixels
+    cy: number;        // center y in scene pixels
+    width: number;     // width in scene pixels
+    height: number;    // height in scene pixels
+};
+
+/** Build an axis-aligned rectangle (AABB) in pixels from a CMToken. */
+export function tokenToBoxPx(token: CMToken, grid: GridInfo): BoxPx {
+    return {
+        cx: token.position.x,
+        cy: token.position.y,
+        width: unitsToPixels(token.widthFeet, grid),
+        height: unitsToPixels(token.heightFeet, grid),
+    };
+}
+
+/**
+ * Minimal edge-to-edge distance between two axis-aligned rectangles (pixels).
+ * Returns 0 when boxes overlap or touch (D&D "they fill their square").
+ */
+export function edgeToEdgeDistancePx(a: BoxPx, b: BoxPx): number {
+    const ax1 = a.cx - a.width / 2;
+    const ax2 = a.cx + a.width / 2;
+    const ay1 = a.cy - a.height / 2;
+    const ay2 = a.cy + a.height / 2;
+
+    const bx1 = b.cx - b.width / 2;
+    const bx2 = b.cx + b.width / 2;
+    const by1 = b.cy - b.height / 2;
+    const by2 = b.cy + b.height / 2;
+
+    // Separation along each axis (0 if overlapping on that axis)
+    const dx = Math.max(0, Math.max(ax1 - bx2, bx1 - ax2));
+    const dy = Math.max(0, Math.max(ay1 - by2, by1 - ay2));
+
+    // Hypotenuse for diagonal separation
+    return Math.hypot(dx, dy);
+}
+
+/**
+ * Distance between two CM tokens in **grid units (feet)**.
+ * mode = "box": closest edge-to-edge of creature boxes (AABB).
+ * mode = "center": center-to-center (no radii subtraction).
+ */
+export type TokenDistanceMode = "box" | "center";
+
+export function distanceBetweenTokensUnits(
+    a: CMToken,
+    b: CMToken,
+    grid: GridInfo,
+    mode: TokenDistanceMode = "box"
+): number {
+    if (mode === "center") {
+        const dx = a.position.x - b.position.x;
+        const dy = a.position.y - b.position.y;
+        return pixelsToUnits(Math.hypot(dx, dy), grid);
+    }
+
+    // "box" mode
+    const ra = tokenToBoxPx(a, grid);
+    const rb = tokenToBoxPx(b, grid);
+    const px = edgeToEdgeDistancePx(ra, rb);
+    return pixelsToUnits(px, grid);
+}
+
+/* ------------------------------------------------------------------ */
+/*                  LEGACY POINT DISTANCE (KEPT)                      */
+/* ------------------------------------------------------------------ */
+
 export type DistanceMode = "center" | "edge";
 
 /**
- * One distance function to rule them all.
- * - mode="center": pure center-to-center distance (in grid units, e.g., feet)
- * - mode="edge": subtracts radii (in units) from both ends, clamped to 0
+ * Legacy distance function:
+ * - mode="center": center-to-center distance (in units)
+ * - mode="edge": subtracts circular radii (in units), clamped to 0
  *
- * Pass radii when using edge mode (e.g., CMToken.radiusFeet). If omitted, treated as 0.
+ * Prefer `distanceBetweenTokensUnits` with mode "box" for D&D squares.
  */
 export function distanceInUnits(
     a: { x: number; y: number },

@@ -21,12 +21,12 @@ import SettingsRounded from "@mui/icons-material/SettingsRounded";
 
 import OBR, { isImage, type Item, type Player } from "@owlbear-rodeo/sdk";
 
-import type { InitiativeItem } from "./InitiativeItem";
+import { initiativeFromItem, metaPatchFromRowDiff, type InitiativeItem } from "./InitiativeItem";
 import InitiativeRow from "./InitiativeRow";
 import PlayerTable from "./PlayerTable";
 import SettingsView from "./SettingsView";
 
-import { META_KEY, isMetadata, type MetaShape } from "./metadata";
+import { META_KEY, batchUpdateMeta, isMetadata, type MetaShape } from "./metadata";
 import { ensureRings, clearRings } from "./rings";
 import { registerInitiativeContextMenu } from "./initiativeMenu";
 import { sortByInitiativeDesc } from "./utils";
@@ -40,38 +40,6 @@ import {
 } from "./SceneState";
 import { useCMTokens } from "./useCMTokens";
 
-
-// Convert item + metadata → InitiativeItem row (kept here to avoid path assumptions)
-function toRow(item: Item, meta: any): InitiativeItem {
-    const img = item as any; // Image extends Item
-    const liveLabel: string | undefined = img.text.plainText;
-    const liveName: string | undefined = img.name;
-
-
-    return {
-        id: item.id,
-        name: liveLabel || liveName || meta?.name || "",
-        initiative: meta?.initiative,
-        active: meta?.active,
-        visible: typeof img?.visible === "boolean" ? img.visible : meta?.visible,
-        ac: meta?.ac,
-        currentHP: meta?.currentHP,
-        maxHP: meta?.maxHP,
-        tempHP: meta?.tempHP,
-        conditions: meta?.conditions,
-        movement: meta?.movement,
-        attackRange: meta?.attackRange,
-        playerCharacter: meta?.playerCharacter,
-        movementColor: meta.movementColor ?? null,
-        rangeColor: meta.rangeColor ?? null,
-        movementWeight: meta.movementWeight ?? null,
-        rangeWeight: meta.rangeWeight ?? null,
-        movementPattern: meta.movementPattern ?? null,
-        rangePattern: meta.rangePattern ?? null,
-        movementOpacity: meta.movementOpacity ?? null,
-        rangeOpacity: meta.rangeOpacity ?? null,
-    };
-}
 
 export function InitiativeTracker() {
     const [role, setRole] = useState<"GM" | "PLAYER">("PLAYER");
@@ -202,11 +170,13 @@ export function InitiativeTracker() {
     // Scene → UI sync
     useEffect(() => {
         const handle = async (items: Item[]) => {
+            if (localEditRef.current) return;
+
             const list: InitiativeItem[] = [];
             for (const it of items) {
                 if (!isImage(it)) continue;
-                const meta = (it.metadata as any)[META_KEY];
-                if (isMetadata(meta)) list.push(toRow(it, meta));
+                const row = initiativeFromItem(it);
+                if (row) list.push(row);
             }
             const sorted = sortByInitiativeDesc(list);
             setRows(sorted);
@@ -228,94 +198,35 @@ export function InitiativeTracker() {
             return;
         }
 
-        const prev = prevRowsRef.current;
-        const prevById = new Map(prev.map((r) => [r.id, r]));
-        type Patch = Partial<{
-            name: string;
-            initiative: number;
-            ac: number;
-            currentHP: number;
-            maxHP: number;
-            tempHP: number;
-            conditions: string[];
-            movement: number;
-            attackRange: number;
-            active: boolean;
-            visible: boolean;
-            playerCharacter: boolean;
-            movementColor: string | null;
-            rangeColor: string | null;
-            movementWeight: number | null;
-            rangeWeight: number | null;
-            movementPattern: "solid" | "dash" | "dot" | null;
-            rangePattern: "solid" | "dash" | "dot" | null;
-            movementOpacity: number | null;
-            rangeOpacity: number | null;
-        }>;
+        (async () => {
+            const prev = prevRowsRef.current;
+            const prevById = new Map(prev.map((r) => [r.id, r]));
 
-        const patches: { id: string; patch: Patch }[] = [];
-        let initiativeChanged = false;
+            const patches: { id: string; patch: Partial<MetaShape> }[] = [];
+            let initiativeChanged = false;
 
-        for (const now of rows) {
-            const before = prevById.get(now.id);
-            if (!before) continue;
+            for (const now of rows) {
+                const before = prevById.get(now.id);
+                if (!before) continue;
 
-            const patch: Patch = {};
-            if (now.name !== before.name) patch.name = now.name;
-            if (now.initiative !== before.initiative) {
-                patch.initiative = now.initiative;
-                initiativeChanged = true;
+                const patch = metaPatchFromRowDiff(before, now);
+                if ("initiative" in patch) initiativeChanged = true;
+                if (Object.keys(patch).length) patches.push({ id: now.id, patch });
             }
-            if (now.ac !== before.ac) patch.ac = now.ac;
-            if (now.currentHP !== before.currentHP) patch.currentHP = now.currentHP;
-            if (now.maxHP !== before.maxHP) patch.maxHP = now.maxHP;
-            if (now.tempHP !== before.tempHP) patch.tempHP = now.tempHP;
-            if (now.movement !== before.movement) patch.movement = now.movement;
-            if (now.attackRange !== before.attackRange) patch.attackRange = now.attackRange;
-            if (now.active !== before.active) patch.active = now.active;
-            if (now.visible !== before.visible) patch.visible = now.visible;
-            if (JSON.stringify(now.conditions) !== JSON.stringify(before.conditions)) {
-                patch.conditions = now.conditions;
+
+            if (patches.length) {
+                await batchUpdateMeta(OBR, patches);
             }
-            if (now.playerCharacter !== before.playerCharacter) {
-                patch.playerCharacter = now.playerCharacter; // NEW
+
+            if (initiativeChanged) {
+                setRows((s) => sortByInitiativeDesc(s));
             }
-            if (now.movementColor !== before.movementColor) patch.movementColor = now.movementColor; // NEW
-            if (now.rangeColor !== before.rangeColor) patch.rangeColor = now.rangeColor;
-            if (now.movementWeight !== before.movementWeight) patch.movementWeight = now.movementWeight ?? null;
-            if (now.rangeWeight !== before.rangeWeight) patch.rangeWeight = now.rangeWeight ?? null;
-            if (now.movementPattern !== before.movementPattern) patch.movementPattern = now.movementPattern ?? null;
-            if (now.rangePattern !== before.rangePattern) patch.rangePattern = now.rangePattern ?? null;
-            if (now.movementOpacity !== before.movementOpacity) patch.movementOpacity = now.movementOpacity ?? null;
-            if (now.rangeOpacity !== before.rangeOpacity) patch.rangeOpacity = now.rangeOpacity ?? null;
 
-
-            if (Object.keys(patch).length) patches.push({ id: now.id, patch });
-        }
-
-        if (patches.length) {
-            OBR.scene.items.updateItems(
-                patches.map((p) => p.id),
-                (items) => {
-                    for (const it of items) {
-                        const meta = (it.metadata as any)[META_KEY];
-                        const p = patches.find((x) => x.id === it.id)?.patch;
-                        if (!p) continue;
-
-                        // write-through to metadata (keeps your extension state portable)
-                        if (meta) Object.assign(meta, p);
-                    }
-                }
-            );
-        }
-
-        if (initiativeChanged) {
-            setRows((s) => sortByInitiativeDesc(s));
-        }
-
-        localEditRef.current = false;
-        prevRowsRef.current = rows;
+            localEditRef.current = false;
+            prevRowsRef.current = rows;
+        })().catch(console.error);
     }, [rows]);
+
 
     // Auto-manage rings when the active row (or started state) changes, including remote updates
     useEffect(() => {
@@ -520,8 +431,6 @@ export function InitiativeTracker() {
                     currentHP: 10,
                     maxHP: 10,
                     tempHP: 0,
-                    conditions: [],
-
                     movement: 30,
                     attackRange: 60,
 

@@ -8,8 +8,15 @@ export type CMToken = {
     position: { x: number; y: number };
     attachedTo?: string | null;
     visible?: boolean;
-    diameterFeet: number;
-    radiusFeet: number;
+
+    // New: store *box* size in feet (creature space), not circle
+    widthFeet: number;
+    heightFeet: number;
+
+    // New: passthrough from Owlbear
+    rotation: number; // (degrees, as provided by OBR)
+    scaleX: number;   // final scale applied to the authored image
+    scaleY: number;
 };
 
 let _perCellUnits: number | null = null;
@@ -20,26 +27,37 @@ async function getPerCellUnits(): Promise<number> {
     return _perCellUnits;
 }
 
-function computeTokenFeetFromSnapshot(item: Item, perCellUnits: number): number {
-    if (!isImage(item) || !item.image?.width || !item.image?.height) {
-        // non-image or missing size → treat as 1 cell
-        return perCellUnits;
+/**
+ * Compute token's rectangular footprint in FEET.
+ * Uses the authored image size and grid dpi to derive base cell dimensions,
+ * then applies item scale. Falls back to 1x1 cells if data is missing.
+ */
+function computeTokenSizeFeetFromSnapshot(
+    item: Item,
+    perCellUnits: number
+): { widthFeet: number; heightFeet: number } {
+    // Default to 1x1 cell creature if we can't read image/dpi
+    let baseCellsW = 1;
+    let baseCellsH = 1;
+
+    if (isImage(item) && item.image?.width && item.image?.height) {
+        const dpi = item.grid?.dpi;
+        if (dpi && dpi > 0) {
+            baseCellsW = item.image.width / dpi;
+            baseCellsH = item.image.height / dpi;
+        }
     }
-
-    // item.grid.dpi = pixels per grid cell the image was authored for
-    const dpi = item.grid?.dpi;
-    if (!dpi) return perCellUnits;
-
-    const baseCellsW = item.image.width / dpi;
-    const baseCellsH = item.image.height / dpi;
 
     const scaleX = Math.abs(item.scale?.x ?? 1);
     const scaleY = Math.abs(item.scale?.y ?? 1);
 
-    // footprint in cells is the larger axis (square/rect bases)
-    const cells = Math.max(baseCellsW * scaleX, baseCellsH * scaleY) || 1;
+    const cellsW = (baseCellsW || 1) * scaleX;
+    const cellsH = (baseCellsH || 1) * scaleY;
 
-    return cells * perCellUnits; // feet
+    return {
+        widthFeet: cellsW * perCellUnits,
+        heightFeet: cellsH * perCellUnits,
+    };
 }
 
 function itemsToCMTokensWithUnits(items: Item[], perCellUnits: number): CMToken[] {
@@ -48,7 +66,11 @@ function itemsToCMTokensWithUnits(items: Item[], perCellUnits: number): CMToken[
         if (!isImage(it)) continue;
         if (it.layer !== "CHARACTER" && it.layer !== "MOUNT") continue;
 
-        const diameterFeet = computeTokenFeetFromSnapshot(it, perCellUnits);
+        const { widthFeet, heightFeet } = computeTokenSizeFeetFromSnapshot(it, perCellUnits);
+
+        const scaleX = Math.abs(it.scale?.x ?? 1);
+        const scaleY = Math.abs(it.scale?.y ?? 1);
+
         list.push({
             id: it.id,
             name: (it.text?.plainText as string) || (it as any).name || "Unnamed",
@@ -56,8 +78,13 @@ function itemsToCMTokensWithUnits(items: Item[], perCellUnits: number): CMToken[
             position: { x: it.position?.x ?? 0, y: it.position?.y ?? 0 },
             attachedTo: it.attachedTo ?? null,
             visible: it.visible,
-            diameterFeet,
-            radiusFeet: diameterFeet / 2,
+
+            widthFeet,
+            heightFeet,
+
+            rotation: it.rotation ?? 0, // OBR uses degrees
+            scaleX,
+            scaleY,
         });
     }
     return list;
@@ -104,7 +131,6 @@ export function onCMTokensChange(cb: (tokens: CMToken[]) => void) {
         });
 
         // grid scale listener (if available) to refresh units + re-emit
-        // If your SDK has a dedicated grid scale change event, use that; otherwise, re-read on generic grid change.
         // @ts-ignore – adjust if a more specific event exists in your SDK version.
         unsubGrid = OBR.scene.grid.onChange?.(async () => {
             _perCellUnits = null; // invalidate cache
@@ -117,7 +143,7 @@ export function onCMTokensChange(cb: (tokens: CMToken[]) => void) {
     // return unified unsubscribe
     return () => {
         live = false;
-        try { unsubItems?.(); } catch { }
-        try { unsubGrid?.(); } catch { }
+        try { unsubItems?.(); } catch { /* noop */ }
+        try { unsubGrid?.(); } catch { /* noop */ }
     };
 }
