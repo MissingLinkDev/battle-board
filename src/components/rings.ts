@@ -1,5 +1,5 @@
 // src/rings.ts
-import OBR, { buildShape, isImage, type Item, type Shape, type Vector2 } from "@owlbear-rodeo/sdk";
+import OBR, { buildPath, buildShape, Command, isImage, type Item, type Shape, type Vector2 } from "@owlbear-rodeo/sdk";
 import { getPluginId } from "../getPluginId";
 import { getGridInfo, unitsToPixels } from "./utils";
 // If you already have grid helpers, you can import and use them here:
@@ -15,6 +15,7 @@ const DEFAULT_RANGE_COLOR = "#fe4c50";
 const DEFAULT_WEIGHT = 12 as number;
 const DEFAULT_PATTERN: "solid" | "dash" | "dot" = "dash";
 const DEFAULT_OPACITY = 1 as number;
+const CONIC_CIRCLE_W = Math.SQRT1_2;
 
 /* =========================
    Types
@@ -94,6 +95,27 @@ async function tokenDiameterFeet(token: Item,): Promise<number> {
     return cells * grid.unitsPerCell; // feet
 }
 
+async function tokenSizeFeet(token: Item): Promise<{ feetW: number; feetH: number }> {
+    const grid = await getGridInfo();
+    const fallback = grid.unitsPerCell;
+
+    if (!isImage(token) || !token.image?.width || !token.image?.height) {
+        return { feetW: fallback, feetH: fallback };
+    }
+    const dpi = token.grid?.dpi;
+    if (!dpi) return { feetW: fallback, feetH: fallback };
+
+    const baseCellsW = token.image.width / dpi;
+    const baseCellsH = token.image.height / dpi;
+    const scaleX = Math.abs(token.scale?.x ?? 1);
+    const scaleY = Math.abs(token.scale?.y ?? 1);
+
+    return {
+        feetW: Math.max(baseCellsW * scaleX, 1) * grid.unitsPerCell,
+        feetH: Math.max(baseCellsH * scaleY, 1) * grid.unitsPerCell,
+    };
+}
+
 /* =========================
    Public API
    ========================= */
@@ -159,17 +181,12 @@ export async function ensureRings(opts: {
         const key = ringKey(tokenId, variant, kind);
         const meta = buildRingMeta(tokenId, variant, kind);
 
-        // remove if “off”
         if (!radiusFeet || radiusFeet <= 0) {
             const stale = await findRingByKey(key);
             if (stale) await OBR.scene.items.deleteItems([stale.id]);
             return;
         }
 
-        // units: FEET → PX using the same grid math as your distances
-        const diameterPx = await feetToPixels(radiusFeet * 2 + await tokenDiameterFeet(token));
-
-        // style
         const strokeWidth = (weightIn ?? DEFAULT_WEIGHT);
         const color = colorIn ?? (kind === "move" ? DEFAULT_MOVE_COLOR : DEFAULT_RANGE_COLOR);
         const strokeOpacity = (opacityIn ?? DEFAULT_OPACITY);
@@ -177,58 +194,127 @@ export async function ensureRings(opts: {
 
         const existing = await findRingByKey(key);
 
-        if (existing) {
-            // UPDATE IN PLACE (no delete/re-add)
-            await OBR.scene.items.updateItems([existing.id], (items) => {
-                const it: any = items[0];
+        if (kind === "move") {
+            // --- unchanged circle logic ---
+            const diameterPx = await feetToPixels(radiusFeet * 2 + await tokenDiameterFeet(token));
 
-                // geometry
-                it.width = diameterPx;
-                it.height = diameterPx;
-                if (forceRecenter) it.position = center;
+            if (existing) {
+                await OBR.scene.items.updateItems([existing.id], (items) => {
+                    const it: any = items[0];
+                    it.width = diameterPx;
+                    it.height = diameterPx;
+                    if (forceRecenter) it.position = center;
 
-                // visibility / attachment
-                it.visible = visible;
-                it.layer = "DRAWING";
-                it.attachedTo = attached ? tokenId : undefined;
-                it.locked = true;
-                it.disableHit = false;
+                    it.visible = visible;
+                    it.layer = "DRAWING";
+                    it.attachedTo = attached ? tokenId : undefined;
+                    it.locked = true;
+                    it.disableHit = false;
 
-                // ✅ style must be updated under `style`
-                const s = { ...(it.style ?? {}) };
-                s.strokeColor = color;
-                s.strokeOpacity = strokeOpacity;
-                s.strokeWidth = strokeWidth;
-                s.strokeDash = strokeDash ?? [];     // empty array = solid
-                it.style = s;
+                    const s = { ...(it.style ?? {}) };
+                    s.strokeColor = color;
+                    s.strokeOpacity = strokeOpacity;
+                    s.strokeWidth = strokeWidth;
+                    s.strokeDash = strokeDash ?? [];
+                    it.style = s;
 
-                // metadata (keep your stable key)
-                (it.metadata as any)[RING_META_KEY] = meta;
-            });
-        } else {
-            // CREATE
-            const b = buildShape()
-                .shapeType("CIRCLE")
-                .width(diameterPx)
-                .height(diameterPx)
-                .position(center)
-                .fillOpacity(0)
-                .strokeColor(color)
-                .strokeOpacity(strokeOpacity)
-                .strokeWidth(strokeWidth)
-                .locked(true)
-                .disableHit(false)
-                .layer("DRAWING")
-                .visible(visible)
-                .metadata({ [RING_META_KEY]: meta });
+                    (it.metadata as any)[RING_META_KEY] = meta;
+                });
+            } else {
+                const b = buildShape()
+                    .shapeType("CIRCLE")
+                    .width(diameterPx)
+                    .height(diameterPx)
+                    .position(center)
+                    .fillOpacity(0)
+                    .strokeColor(color)
+                    .strokeOpacity(strokeOpacity)
+                    .strokeWidth(strokeWidth)
+                    .locked(true)
+                    .disableHit(false)
+                    .layer("DRAWING")
+                    .visible(visible)
+                    .metadata({ [RING_META_KEY]: meta });
 
-            if (strokeDash) b.strokeDash(strokeDash as any);
-            if (attached) b.attachedTo(tokenId);
+                if (strokeDash) b.strokeDash(strokeDash as any);
+                if (attached) b.attachedTo(tokenId);
 
-            const shape = b.build();
-            await OBR.scene.items.addItems([shape]);
+                const shape = b.build();
+                await OBR.scene.items.addItems([shape]);
+            }
+            return;
+        }
+
+        // ===== RANGE → CURVE =====
+        {
+            {
+                // token size from image width/height + dpi + scale (feet → px)
+                const { feetW, feetH } = await tokenSizeFeet(token);
+                const tokenWpx = await feetToPixels(feetW);
+                const tokenHpx = await feetToPixels(feetH);
+                // half-sizes
+                const halfW = tokenWpx / 2;
+                const halfH = tokenHpx / 2;
+                const r = await feetToPixels(attackRange);
+                //Token Corners
+                const cornerTL = { x: -halfW - r, y: -halfH - r };
+                const cornerTR = { x: halfW + r, y: -halfH - r };
+                const cornerBR = { x: halfW + r, y: halfH + r };
+                const cornerBL = { x: -halfW - r, y: halfH + r };
+                // corners relative to token center
+                const topLeft: Vector2 = { x: -halfW, y: -halfH - r };
+                const leftTop: Vector2 = { x: -halfW - r, y: -halfH };
+
+                const topRight: Vector2 = { x: halfW, y: -halfH - r };
+                const rightTop: Vector2 = { x: halfW + r, y: -halfH };
+
+                const bottomRight: Vector2 = { x: halfW, y: halfH + r };
+                const rightBottom: Vector2 = { x: halfW + r, y: halfH };
+
+                const bottomLeft: Vector2 = { x: -halfW, y: halfH + r };
+                const leftBottom: Vector2 = { x: -halfW - r, y: halfH };
+
+                // Rebuild as PATH; replace whatever existed (avoids type mismatch)
+                const existing = await findRingByKey(key);
+                if (existing) await OBR.scene.items.deleteItems([existing.id]);
+
+                const metaObj = { [RING_META_KEY]: meta };
+                const dash = dashFor(patternIn ?? DEFAULT_PATTERN, strokeWidth);
+
+                // Build a PATH: lines between tangency points; conic arcs around corners
+                const b = buildPath()
+                    .commands([
+                        [Command.MOVE, topLeft.x, topLeft.y],
+                        [Command.LINE, topRight.x, topRight.y],
+                        [Command.CONIC, cornerTR.x, cornerTR.y, rightTop.x, rightTop.y, CONIC_CIRCLE_W],
+                        [Command.LINE, rightBottom.x, rightBottom.y],
+                        [Command.CONIC, cornerBR.x, cornerBR.y, bottomRight.x, bottomRight.y, CONIC_CIRCLE_W],
+                        [Command.LINE, bottomLeft.x, bottomLeft.y],
+                        [Command.CONIC, cornerBL.x, cornerBL.y, leftBottom.x, leftBottom.y, CONIC_CIRCLE_W],
+                        [Command.LINE, leftTop.x, leftTop.y],
+                        [Command.CONIC, cornerTL.x, cornerTL.y, topLeft.x, topLeft.y, CONIC_CIRCLE_W],
+                        [Command.CLOSE],
+                    ])
+                    .position(center)
+                    .fillOpacity(0)
+                    .strokeColor(color)
+                    .strokeOpacity(strokeOpacity)
+                    .strokeWidth(strokeWidth)
+                    .locked(true)
+                    .disableHit(false)
+                    .layer("DRAWING")
+                    .visible(visible)
+                    .metadata(metaObj);
+
+                if (dash) b.strokeDash(dash as any);
+                if (attached) b.attachedTo(tokenId);
+
+                const pathItem = b.build();
+                await OBR.scene.items.addItems([pathItem]);
+            }
         }
     };
+
 
 
     // Fast path for single-type updates
