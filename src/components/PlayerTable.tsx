@@ -7,18 +7,29 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import type { InitiativeItem } from "./InitiativeItem";
 import PlayerRow from "./PlayerRow";
+import type { CMToken } from "./tokens";
 
-export default function PlayerTable({ items }: { items: InitiativeItem[] }) {
+type PlayerTableProps = {
+    items: InitiativeItem[];
+    showHealthStatus?: boolean;   // scene.settings.displayHealthStatusToPlayer
+    showHealthNumber?: boolean;   // scene.settings.displayPlayerHealthNumber
+    showDistances?: boolean;
+    tokens: CMToken[];
+};
+
+export default function PlayerTable({ items, showHealthStatus, showHealthNumber, showDistances, tokens }: PlayerTableProps) {
+    const showHealthCol = !!showHealthStatus || !!showHealthNumber;
+    const colCount = 4 + (showHealthCol ? 1 : 0);
     return (
         <TableContainer
             component={Paper}
             sx={{
                 flex: 1,
-                minHeight: 0,
+                minHeight: 166,
                 borderRadius: 0,
+                overflow: "hidden",
                 display: "flex",
                 flexDirection: "column",
-                overflow: "hidden",
             }}
         >
             <Table
@@ -26,31 +37,35 @@ export default function PlayerTable({ items }: { items: InitiativeItem[] }) {
                 size="small"
                 aria-label="initiative table"
                 sx={{
-                    borderCollapse: "collapse",
                     tableLayout: "fixed",
                     width: "100%",
-                    "& td, & th": { borderBottom: "1px solid", borderColor: "divider" },
-                    "& thead th": {
-                        fontSize: "0.72rem",
-                        letterSpacing: 0.4,
-                        py: 0.9,          // taller header
-                        height: 28,
-                    },
-                    "& .MuiTableRow-root": { borderSpacing: 0 }
+                    "& td, & th": { py: 0.25, px: 0.25 },
+                    "& thead th": { fontSize: "0.72rem", letterSpacing: 0.4, py: 0.9, height: 28 },
                 }}
             >
                 <TableHead>
                     <TableRow>
-                        <TableCell width={20} />
-                        <TableCell width={36}>INIT</TableCell>
-                        <TableCell>NAME</TableCell>
+                        <TableCell width={18}></TableCell>
+                        <TableCell width={40} align="center">INIT</TableCell>
+                        <TableCell width={60} align="center"></TableCell>
+                        <TableCell align="center">NAME</TableCell>
+                        {showHealthCol && <TableCell width={62} align="center">HEALTH</TableCell>}
                     </TableRow>
                 </TableHead>
 
                 <TableBody>
-                    {items.map((item) => <PlayerRow key={item.id} row={item} />)}
+                    {items.filter((item) => item.visible).map((item) => <PlayerRow
+                        key={item.id}
+                        row={item}
+                        showHealthStatus={!!showHealthStatus}
+                        showHealthNumber={!!showHealthNumber}
+                        showDistances={!!showDistances}
+                        tokens={tokens.filter((token) => token.visible === item.visible)}
+                        colSpan={colCount}
+                    />)}
                 </TableBody>
             </Table>
         </TableContainer>
+
     );
 }

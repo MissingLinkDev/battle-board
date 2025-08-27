@@ -15,7 +15,8 @@ export type InitiativeSettings = {
 
     // Gameplay
     disablePlayerList: boolean;
-    displayPlayerHealthStatus: boolean;
+    displayHealthStatusToPlayer: boolean;
+    displayPlayerHealthNumbers: boolean;
     showRangeRings: boolean;
     dmRingToggle: boolean;
 };
@@ -37,7 +38,8 @@ export const DEFAULT_SETTINGS: InitiativeSettings = {
 
     // Gameplay
     disablePlayerList: false,
-    displayPlayerHealthStatus: true,
+    displayHealthStatusToPlayer: true,
+    displayPlayerHealthNumbers: true,
     showRangeRings: true,
     dmRingToggle: true,
 };

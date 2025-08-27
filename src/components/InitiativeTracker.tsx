@@ -68,6 +68,12 @@ export function InitiativeTracker() {
     const showAC = settings.showArmor;
     const showHP = settings.showHP;
     const showDMR = settings.dmRingToggle;
+
+    const gmColCount =
+        3 +                       // chevron, INIT, NAME
+        (showAC ? 1 : 0) +
+        (showHP ? 2 : 0) +
+        (showDMR ? 1 : 0);
     //Get all tokens
     const cmTokens = useCMTokens();
 
@@ -452,20 +458,6 @@ export function InitiativeTracker() {
         // Your existing Scene→UI sync effect will pick up the change and populate rows
     };
 
-    // if (view === "settings") {
-    //     // Settings screen
-    //     return (
-    //         <SettingsView
-    //             value={settings}
-    //             onChange={async (next) => {
-    //                 setSettings(next);
-    //                 await saveSceneState({ settings: next });
-    //             }}
-    //             onBack={() => setView("tracker")}
-    //             rows={sortedRows}
-    //         />
-    //     );
-    // }
 
     return (
         <Box
@@ -543,6 +535,7 @@ export function InitiativeTracker() {
                                         }}
                                         started={started}
                                         tokens={cmTokens}
+                                        colSpan={gmColCount}
                                     />
                                 ))}
                             </TableBody>
@@ -598,9 +591,20 @@ export function InitiativeTracker() {
                         <Box sx={{ p: 2, textAlign: "center", color: "text.secondary" }}>
                             <Typography variant="body2">The DM has disabled the player initiative list.</Typography>
                         </Box>
-                    ) : (
-                        <PlayerTable items={sortedRows} />
-                    )
+                    ) : !started ? (
+                        <Box sx={{ p: 2, textAlign: "center", color: "text.secondary" }}>
+                            <Typography variant="body2">Initiative has not started yet.</Typography>
+                        </Box>
+                    ) :
+                        (
+                            <PlayerTable
+                                items={sortedRows.filter((r) => r.visible !== false)}
+                                showHealthStatus={settings.displayHealthStatusToPlayer}
+                                showHealthNumber={settings.displayPlayerHealthNumbers}
+                                showDistances={settings.showDistances}
+                                tokens={cmTokens}
+                            />
+                        )
                 )}
 
                 {role === "GM" && (

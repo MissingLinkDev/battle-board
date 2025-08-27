@@ -48,6 +48,7 @@ type Props = {
     settings?: RowSettings;
     started: boolean;
     tokens: CMToken[];
+    colSpan?: number;
 };
 
 export default function InitiativeRow({
@@ -61,6 +62,7 @@ export default function InitiativeRow({
     settings,
     tokens,
     started,
+    colSpan,
 }: Props) {
     // ------------ Local mirrors ------------
     const [initiative, setInitiative] = useState(row.initiative);
@@ -643,7 +645,7 @@ export default function InitiativeRow({
                     }),
                 }}
             >
-                <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={7}>
+                <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={colSpan ?? 7}>
                     <Collapse in={!!expanded} timeout="auto" unmountOnExit onEntered={onSizeChange} onExited={onSizeChange} onEntering={onSizeChange}>
                         <Box sx={{ px: 1, pb: 1 }}>
                             <Stack direction="row" spacing={1.5} alignItems="stretch">

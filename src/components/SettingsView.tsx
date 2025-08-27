@@ -65,8 +65,9 @@ export default function SettingsView({ value, onChange, onBack, rows }: Props) {
                 title: "Gameplay",
                 options: [
                     ["Disable Player Initiative List", "disablePlayerList"],
-                    ["Display Player Health Status", "displayPlayerHealthStatus"],
-                    ["Show Range Rings for Player Characters", "showRangeRings"],
+                    ["Display Health Status to Player", "displayHealthStatusToPlayer"],
+                    ["Display Player Health Numbers to Players", "displayPlayerHealthNumbers"],
+                    ["Show Range Rings for Player Characters on turn", "showRangeRings"],
                 ] as const,
             },
         ],
