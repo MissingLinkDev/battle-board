@@ -397,7 +397,7 @@ export default function SettingsView({ value, onChange, onBack, rows }: Props) {
                             }}
                         >
                             <AccordionSummary expandIcon={<ExpandMoreRounded />} sx={{ px: 1, minHeight: 38 }}>
-                                <Typography sx={{ fontWeight: 700, fontSize: "0.85rem" }}>Columns</Typography>
+                                <Typography sx={{ fontWeight: 700, fontSize: "0.85rem" }}>DM Columns</Typography>
                             </AccordionSummary>
                             <AccordionDetails sx={{ p: 0 }}>
                                 <RowShell
@@ -437,66 +437,6 @@ export default function SettingsView({ value, onChange, onBack, rows }: Props) {
                                 />
                             </AccordionDetails>
                         </Accordion>
-
-                        {/* Info Panel (Accordion) */}
-                        <Accordion
-                            elevation={0}
-                            disableGutters
-                            square
-                            expanded={openDisplayInfo}
-                            onChange={(_, exp) => setOpenDisplayInfo(exp)}
-                            sx={{
-                                border: (t) => `1px solid ${t.palette.divider}`,
-                                borderRadius: 1,
-                                mt: 1,
-                                "&:before": { display: "none" },
-                            }}
-                        >
-                            <AccordionSummary expandIcon={<ExpandMoreRounded />} sx={{ px: 1, minHeight: 38 }}>
-                                <Typography sx={{ fontWeight: 700, fontSize: "0.85rem" }}>Info Panel</Typography>
-                            </AccordionSummary>
-                            <AccordionDetails sx={{ p: 0 }}>
-                                <RowShell
-                                    title="Distances"
-                                    description="Show distances table."
-                                    right={
-                                        <Toggle
-                                            checked={!!value.showDistances}
-                                            onChange={(next) => set({ showDistances: next })}
-                                            aria-label="toggle-distances"
-                                        />
-                                    }
-                                />
-                            </AccordionDetails>
-                        </Accordion>
-                    </Box>
-
-                    {/* ========================== Gameplay ======================== */}
-                    <Box>
-                        <SectionTitle>Gameplay</SectionTitle>
-
-                        {/* Player Initiative List (flipped logic: SHOW when true, HIDE when false) */}
-                        <Box
-                            sx={{
-                                borderRadius: 1,
-                                overflow: "hidden",
-                                border: (t) => `1px solid ${t.palette.divider}`,
-                                mb: 1,
-                            }}
-                        >
-                            <RowShell
-                                title="Player Initiative List"
-                                description="Show list to players."
-                                right={
-                                    <Toggle
-                                        checked={!value.disablePlayerList /* show when ON */}
-                                        onChange={(next) => set({ disablePlayerList: !next })}
-                                        aria-label="toggle-player-list-show"
-                                    />
-                                }
-                            />
-                        </Box>
-
                         {/* Player Columns (Accordion) */}
                         <Accordion
                             elevation={0}
@@ -504,9 +444,11 @@ export default function SettingsView({ value, onChange, onBack, rows }: Props) {
                             square
                             expanded={openPlayerColumns}
                             onChange={(_, exp) => setOpenPlayerColumns(exp)}
+
                             sx={{
                                 border: (t) => `1px solid ${t.palette.divider}`,
                                 borderRadius: 1,
+                                mt: 1,
                                 "&:before": { display: "none" },
                             }}
                         >
@@ -579,6 +521,67 @@ export default function SettingsView({ value, onChange, onBack, rows }: Props) {
                                 />
                             </AccordionDetails>
                         </Accordion>
+
+                        {/* Info Panel (Accordion) */}
+                        <Accordion
+                            elevation={0}
+                            disableGutters
+                            square
+                            expanded={openDisplayInfo}
+                            onChange={(_, exp) => setOpenDisplayInfo(exp)}
+                            sx={{
+                                border: (t) => `1px solid ${t.palette.divider}`,
+                                borderRadius: 1,
+                                mt: 1,
+                                "&:before": { display: "none" },
+                            }}
+                        >
+                            <AccordionSummary expandIcon={<ExpandMoreRounded />} sx={{ px: 1, minHeight: 38 }}>
+                                <Typography sx={{ fontWeight: 700, fontSize: "0.85rem" }}>Info Panel</Typography>
+                            </AccordionSummary>
+                            <AccordionDetails sx={{ p: 0 }}>
+                                <RowShell
+                                    title="Distances"
+                                    description="Show distances table."
+                                    right={
+                                        <Toggle
+                                            checked={!!value.showDistances}
+                                            onChange={(next) => set({ showDistances: next })}
+                                            aria-label="toggle-distances"
+                                        />
+                                    }
+                                />
+                            </AccordionDetails>
+                        </Accordion>
+                    </Box>
+
+                    {/* ========================== Gameplay ======================== */}
+                    <Box>
+                        <SectionTitle>Gameplay</SectionTitle>
+
+                        {/* Player Initiative List (flipped logic: SHOW when true, HIDE when false) */}
+                        <Box
+                            sx={{
+                                borderRadius: 1,
+                                overflow: "hidden",
+                                border: (t) => `1px solid ${t.palette.divider}`,
+                                mb: 1,
+                            }}
+                        >
+                            <RowShell
+                                title="Player Initiative List"
+                                description="Show list to players."
+                                right={
+                                    <Toggle
+                                        checked={!value.disablePlayerList /* show when ON */}
+                                        onChange={(next) => set({ disablePlayerList: !next })}
+                                        aria-label="toggle-player-list-show"
+                                    />
+                                }
+                            />
+                        </Box>
+
+
                     </Box>
                 </Stack>
             </Box>
