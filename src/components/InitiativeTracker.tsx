@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo, useCallback } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
@@ -58,6 +58,15 @@ export function InitiativeTracker() {
     //watching the root box for size changes
     const rootRef = useRef<HTMLDivElement | null>(null); // attach to the outer <Box>
     const MIN_ACTION_HEIGHT = 200;
+    const measureAndApply = (el: HTMLElement) => {
+        const h = Math.ceil(el.getBoundingClientRect().height) + 1;
+        OBR.action.setHeight(Math.max(h, MIN_ACTION_HEIGHT));
+    };
+
+    const kickMeasure = (el: HTMLElement) => {
+        // let layout settle (fonts/CSS/collapse) then measure once
+        requestAnimationFrame(() => requestAnimationFrame(() => measureAndApply(el)));
+    };
 
     const active = useMemo(() => rows.find((r) => r.active) ?? null, [rows]);
     const prevActiveId = useRef<string | null>(null);
@@ -122,56 +131,53 @@ export function InitiativeTracker() {
     }, []);
 
     // Attach a ResizeObserver to the root ONCE
-    const resizeNow = useCallback(() => {
+    useEffect(() => {
         const el = rootRef.current;
-        if (!el) return;
+        if (!el || typeof ResizeObserver === "undefined") return;
 
-        // Use scrollHeight to capture the full natural content height
-        const natural =
-            Math.max(el.scrollHeight || 0, el.getBoundingClientRect().height || 0);
+        const measure = (entry: ResizeObserverEntry) => {
+            // Prefer border-box if available
+            const bbs: any = (entry as any).borderBoxSize;
+            let h: number;
 
-        OBR.action.setHeight(Math.max(natural, MIN_ACTION_HEIGHT));
+            if (bbs && (bbs.blockSize || (Array.isArray(bbs) && bbs[0]?.blockSize))) {
+                const box = Array.isArray(bbs) ? bbs[0] : bbs;
+                h = box.blockSize as number;
+            } else {
+                // Fallback that works everywhere (includes borders)
+                h = (entry.target as HTMLElement).getBoundingClientRect().height;
+            }
+
+            // Round up and add 1 to avoid rare 1px gutter from fractional layout
+            const next = Math.max(h, MIN_ACTION_HEIGHT);
+            OBR.action.setHeight(next);
+        };
+
+        const ro = new ResizeObserver((entries) => {
+            if (entries[0]) measure(entries[0]);
+        });
+
+        // Try to observe border-box when supported (ignored otherwise)
+        ro.observe(el, { box: "border-box" });
+
+        // Do an initial measure (some browsers don’t fire RO immediately on mount)
+        requestAnimationFrame(() => {
+            const rect = el.getBoundingClientRect();
+            OBR.action.setHeight(Math.max(rect.height, MIN_ACTION_HEIGHT));
+        });
+
+        return () => {
+            ro.disconnect();
+            // Optional: set a sensible default when unmounted
+            OBR.action.setHeight(MIN_ACTION_HEIGHT); // or whatever your collapsed height is
+        };
     }, []);
 
-    const scheduleResize = useCallback(() => {
-        // double rAF lets layout/paint settle (useful after toggling views/expansions)
-        requestAnimationFrame(() => requestAnimationFrame(resizeNow));
-    }, [resizeNow]);
-
-    // --- RESIZE: attach a single ResizeObserver to the whole panel --------------
     useEffect(() => {
-        const el = rootRef.current;
-        if (!el || typeof ResizeObserver === "undefined") {
-            // still do an initial sizing if RO isn't available
-            scheduleResize();
-            return;
+        if (view === "tracker" && rootRef.current) {
+            kickMeasure(rootRef.current);
         }
-
-        const ro = new ResizeObserver(() => {
-            // Any size/content change in the panel triggers a resize
-            resizeNow();
-        });
-        ro.observe(el);
-
-        // Initial sizing on mount (after first paint)
-        scheduleResize();
-
-        return () => ro.disconnect();
-    }, [resizeNow, scheduleResize]);
-
-    // --- RESIZE: when view changes (tracker <-> settings) -----------------------
-    useEffect(() => {
-        // If you have `view` state: "tracker" | "settings"
-        // Make sure to include `view` in your component and update the deps here:
-        scheduleResize();
-    }, [view, scheduleResize]);
-
-    // --- RESIZE: when data that affects height changes -------------------------
-    // 1) Row count (add/remove), 2) Which rows are expanded/collapsed
-    // NOTE: If expandedIds is a Set, serialize it to a stable string for deps.
-    useEffect(() => {
-        scheduleResize();
-    }, [sortedRows.length, Array.from(expandedIds).join("|"), scheduleResize]);
+    }, [view]);
 
     // Scene → UI sync
     useEffect(() => {
@@ -499,14 +505,12 @@ export function InitiativeTracker() {
                                         expanded={expandedIds.has(it.id)}
                                         onToggleExpand={() => {
                                             toggleExpanded(it.id);
-                                            // if you have resizeNow, keep this nudge; otherwise safe to remove
-                                            requestAnimationFrame(() => requestAnimationFrame(resizeNow));
                                         }}
                                         onChange={(draft) => {
                                             localEditRef.current = true;
                                             setRows((prev) => prev.map((r) => (r.id === it.id ? { ...r, ...draft } : r)));
                                         }}
-                                        onSizeChange={resizeNow}
+                                        // onSizeChange={resizeNow}
                                         onRemove={removeFromInitiative}
                                         settings={{
                                             showMovementRange: settings.showMovementRange,
