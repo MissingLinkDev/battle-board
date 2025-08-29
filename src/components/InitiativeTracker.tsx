@@ -59,7 +59,7 @@ export function InitiativeTracker() {
     const rootRef = useRef<HTMLDivElement | null>(null); // attach to the outer <Box>
     const MIN_ACTION_HEIGHT = 200;
     const measureAndApply = (el: HTMLElement) => {
-        const h = Math.ceil(el.getBoundingClientRect().height) + 1;
+        const h = el.getBoundingClientRect().height;
         OBR.action.setHeight(Math.max(h, MIN_ACTION_HEIGHT));
     };
 
