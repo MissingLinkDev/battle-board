@@ -39,6 +39,7 @@ export type MetaShape = {
 
     // DM-only quick toggle
     dmPreview?: boolean;
+    inInitiative?: boolean;
 };
 
 export function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -95,6 +96,7 @@ export const DEFAULT_META: Omit<MetaShape, "name" | "visible"> = {
     rangeOpacity: 1,
 
     dmPreview: false,
+    inInitiative: true,
 };
 
 /** Create initial meta from an Item snapshot + defaults. */

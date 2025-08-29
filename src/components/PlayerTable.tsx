@@ -8,18 +8,25 @@ import TableRow from "@mui/material/TableRow";
 import type { InitiativeItem } from "./InitiativeItem";
 import PlayerRow from "./PlayerRow";
 import type { CMToken } from "./tokens";
+import type { InitiativeSettings } from "./SceneState";
 
 type PlayerTableProps = {
     items: InitiativeItem[];
-    showHealthStatus?: boolean;   // scene.settings.displayHealthStatusToPlayer
-    showHealthNumber?: boolean;   // scene.settings.displayPlayerHealthNumber
-    showDistances?: boolean;
+    settings: InitiativeSettings;   // pass the whole settings object
     tokens: CMToken[];
 };
 
-export default function PlayerTable({ items, showHealthStatus, showHealthNumber, showDistances, tokens }: PlayerTableProps) {
-    const showHealthCol = !!showHealthStatus || !!showHealthNumber;
+export default function PlayerTable({ items, settings, tokens }: PlayerTableProps) {
+    const healthMasterOn = !!settings.displayHealthStatusToPlayer;
+    // Show column if master is on and at least one mode isn't "none"
+    const healthAnyMode =
+        (settings.pcHealthMode ?? "numbers") !== "none" ||
+        (settings.npcHealthMode ?? "status") !== "none";
+
+    const showHealthCol = healthMasterOn && healthAnyMode;
+
     const colCount = 4 + (showHealthCol ? 1 : 0);
+
     return (
         <TableContainer
             component={Paper}
@@ -54,18 +61,20 @@ export default function PlayerTable({ items, showHealthStatus, showHealthNumber,
                 </TableHead>
 
                 <TableBody>
-                    {items.filter((item) => item.visible).map((item) => <PlayerRow
-                        key={item.id}
-                        row={item}
-                        showHealthStatus={!!showHealthStatus}
-                        showHealthNumber={!!showHealthNumber}
-                        showDistances={!!showDistances}
-                        tokens={tokens.filter((token) => token.visible === item.visible)}
-                        colSpan={colCount}
-                    />)}
+                    {items
+                        .filter((item) => item.visible)
+                        .map((item) => (
+                            <PlayerRow
+                                key={item.id}
+                                row={item}
+                                settings={settings} // pass all settings down
+                                tokens={tokens.filter((token) => token.visible === item.visible)}
+                                colSpan={colCount}
+                                showHealthColumn={showHealthCol} // optional convenience for layout
+                            />
+                        ))}
                 </TableBody>
             </Table>
         </TableContainer>
-
     );
 }

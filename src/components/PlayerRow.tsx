@@ -18,18 +18,25 @@ import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
 import { distanceBetweenTokensUnits, formatDistanceLabel, formatFeet, getGridInfo, type TokenDistanceMode } from "./utils";
 import type { CMToken } from "./tokens";
+import type { InitiativeSettings } from "./SceneState";
 
 type Props = {
     row: InitiativeItem;
     tokenUrl?: string;
-    showHealthStatus?: boolean;  // new
-    showHealthNumber?: boolean;  // new
-    showDistances?: boolean;
+    settings: InitiativeSettings;       // NEW: pass full settings
     tokens: CMToken[];
     colSpan?: number;
+    showHealthColumn?: boolean;
 };
 
-export default function PlayerRow({ row, tokenUrl, showHealthStatus, showHealthNumber, showDistances, tokens, colSpan }: Props) {
+export default function PlayerRow({
+    row,
+    tokenUrl,
+    settings,
+    tokens,
+    colSpan,
+    showHealthColumn,
+}: Props) {
     const [open, setOpen] = useState(row.active);
     const isActive = row.active;
     const prevActiveRef = useRef(row.active);
@@ -44,6 +51,17 @@ export default function PlayerRow({ row, tokenUrl, showHealthStatus, showHealthN
 
     //Distances
     const [distances, setDistances] = useState<{ id: string; name: string; ft: number }[]>([]);
+
+    // --------- derive health visibility for THIS row ----------
+    const healthMasterOn = !!settings.displayHealthStatusToPlayer;
+    const pcMode = (settings.pcHealthMode ?? "numbers") as "none" | "status" | "numbers";
+    const npcMode = (settings.npcHealthMode ?? "status") as "none" | "status" | "numbers";
+    const rowMode = isPC ? pcMode : npcMode;
+
+    // If parent didn't pass showHealthColumn, derive defensively (matches PlayerTable logic)
+    const computedShowHealthColumn =
+        showHealthColumn ??
+        (healthMasterOn && (pcMode !== "none" || npcMode !== "none"));
 
     useEffect(() => {
         // when row becomes active (false -> true), open the panel
@@ -91,7 +109,7 @@ export default function PlayerRow({ row, tokenUrl, showHealthStatus, showHealthN
         let cancelled = false;
 
         (async () => {
-            if (!showDistances) {
+            if (!settings.showDistances) {
                 setDistances([]);
                 return;
             }
@@ -112,8 +130,8 @@ export default function PlayerRow({ row, tokenUrl, showHealthStatus, showHealthN
                     return {
                         id: t.id,
                         name: t.name || "(unnamed)",
-                        ft: formatFeet(raw),          // numeric, good for sorting/comparisons
-                        text: formatDistanceLabel(raw) // "Touch" if <5, else "N ft"
+                        ft: formatFeet(raw), // numeric
+                        text: formatDistanceLabel(raw), // "Touch" if <5, else "N ft"
                     };
                 })
                 .sort((a, b) => a.ft - b.ft);
@@ -124,7 +142,40 @@ export default function PlayerRow({ row, tokenUrl, showHealthStatus, showHealthN
         return () => {
             cancelled = true;
         };
-    }, [tokens, row.id, showDistances]);
+    }, [tokens, row.id, settings.showDistances]);
+
+    const renderHealthCell = () => {
+        if (!healthMasterOn || rowMode === "none") return null;
+
+        if (rowMode === "numbers") {
+            // Numbers: show current/max; temp on second line if present (PC or NPC as configured)
+            return (
+                <Box sx={{ lineHeight: 1.1 }}>
+                    <Typography sx={{ fontSize: "0.75rem", fontWeight: 600 }}>
+                        {row.currentHP}/{row.maxHP}
+                    </Typography>
+                    {row.tempHP > 0 && (
+                        <Typography sx={{ fontSize: "0.7rem", color: "text.secondary" }}>
+                            temp: {row.tempHP}
+                        </Typography>
+                    )}
+                </Box>
+            );
+        }
+
+        // Status
+        return (
+            <Typography
+                sx={{
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    color: isBloodied ? "error.main" : "success.main",
+                }}
+            >
+                {statusText}
+            </Typography>
+        );
+    };
 
     return (
         <>
@@ -143,7 +194,7 @@ export default function PlayerRow({ row, tokenUrl, showHealthStatus, showHealthN
             >
                 {/* Expand / Collapse */}
                 <TableCell width={28}>
-                    {showDistances && (
+                    {settings.showDistances && (
                         <IconButton
                             aria-label="expand row"
                             size="small"
@@ -202,41 +253,15 @@ export default function PlayerRow({ row, tokenUrl, showHealthStatus, showHealthN
                     </Typography>
                 </TableCell>
 
-                {/* Health*/}
-
-                {(showHealthStatus || showHealthNumber) && (
+                {/* Health (only render cell if table allocated the column) */}
+                {computedShowHealthColumn && (
                     <TableCell width={62} align="center">
-                        {isPC && showHealthNumber ? (
-                            // PC + numbers: show current/max, and 2nd line "temp: XX" if any
-                            <Box sx={{ lineHeight: 1.1 }}>
-                                <Typography sx={{ fontSize: "0.75rem", fontWeight: 600 }}>
-                                    {row.currentHP}/{row.maxHP}
-                                </Typography>
-                                {row.tempHP > 0 && (
-                                    <Typography sx={{ fontSize: "0.7rem", color: "text.secondary" }}>
-                                        temp: {row.tempHP}
-                                    </Typography>
-                                )}
-                            </Box>
-                        ) : showHealthStatus ? (
-                            // Status (PC without numbers, or any non-PC when status is enabled)
-                            <Typography
-                                sx={{
-                                    fontSize: "0.75rem",
-                                    fontWeight: 600,
-                                    color: isBloodied ? "error.main" : "success.main",
-                                }}
-                            >
-                                {statusText}
-                            </Typography>
-                        ) : null}
+                        {renderHealthCell()}
                     </TableCell>
                 )}
             </TableRow>
 
-
-            {/* Collapsed area: reserved for speeds/distances later */}
-            {showDistances && (
+            {settings.showDistances && (
                 <TableRow>
                     <TableCell colSpan={colSpan} sx={{ p: 0, borderBottom: 0 }}>
                         <Collapse in={open} timeout="auto" unmountOnExit>
@@ -246,7 +271,10 @@ export default function PlayerRow({ row, tokenUrl, showHealthStatus, showHealthN
                                         <Typography sx={{ fontWeight: 700, fontSize: "0.95rem", textAlign: "center", mb: 0.75 }}>
                                             Distances
                                         </Typography>
-                                        <Tooltip title="Measured from edge to edge; attack range must be greater than distance." enterDelay={300}>
+                                        <Tooltip
+                                            title="Measured from edge to edge; attack range must be greater than distance."
+                                            enterDelay={300}
+                                        >
                                             <InfoRounded fontSize="small" sx={{ color: "text.secondary", cursor: "help" }} />
                                         </Tooltip>
                                     </Stack>
@@ -254,11 +282,17 @@ export default function PlayerRow({ row, tokenUrl, showHealthStatus, showHealthN
                                 <List dense disablePadding sx={{ px: 0, "& .MuiListItem-root": { py: 0.25 } }}>
                                     {distances.length === 0 ? (
                                         <ListItem disableGutters>
-                                            <Typography sx={{ fontSize: "0.8rem", color: "text.secondary" }}>No other tokens found.</Typography>
+                                            <Typography sx={{ fontSize: "0.8rem", color: "text.secondary" }}>
+                                                No other tokens found.
+                                            </Typography>
                                         </ListItem>
                                     ) : (
                                         distances.map((d) => (
-                                            <ListItem key={d.id} disableGutters sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                                            <ListItem
+                                                key={d.id}
+                                                disableGutters
+                                                sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
+                                            >
                                                 <Typography
                                                     sx={{
                                                         flex: 1,

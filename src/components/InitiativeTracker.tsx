@@ -26,7 +26,7 @@ import InitiativeRow from "./InitiativeRow";
 import PlayerTable from "./PlayerTable";
 import SettingsView from "./SettingsView";
 
-import { META_KEY, batchUpdateMeta, isMetadata, type MetaShape } from "./metadata";
+import { META_KEY, batchUpdateMeta, createMetaForItem, isMetadata, type MetaShape } from "./metadata";
 import { ensureRings, clearRings } from "./rings";
 import { registerInitiativeContextMenu } from "./initiativeMenu";
 import { sortByInitiativeDesc } from "./utils";
@@ -422,36 +422,20 @@ export function InitiativeTracker() {
             for (const it of items) {
                 // don’t overwrite if a valid block already exists
                 const current = (it.metadata as any)[META_KEY];
-                if (isMetadata(current)) continue;
+                if (!isMetadata(current)) {
+                    (it.metadata as any)[META_KEY] = {
+                        ...createMetaForItem(it),
+                        inInitiative: true,
+                    };
+                    continue;
+                }
 
-                // match your context‑menu displayName behavior
-                let displayName = (isImage(it) && (it as any).text?.plainText) || (it as any).name || "Unnamed";
-
-                (it.metadata as any)[META_KEY] = {
-                    initiative: 0,
-                    name: displayName,
-                    active: false,
-                    visible: it.visible,
-
-                    ac: 10,
-                    currentHP: 10,
-                    maxHP: 10,
-                    tempHP: 0,
-                    movement: 30,
-                    attackRange: 60,
-
-                    playerCharacter: false,
-                    movementColor: "#519e00", // DEFAULT_MOVE_COLOR
-                    rangeColor: "#fe4c50",    // DEFAULT_RANGE_COLOR
-                    movementWeight: 12,    // e.g. 4..16
-                    rangeWeight: 12,
-
-                    movementPattern: "dash",
-                    rangePattern: "dash",
-
-                    movementOpacity: 1,   // 0..1
-                    rangeOpacity: 1,
-                } as MetaShape;
+                // If it was removed previously, revive without nuking fields
+                current.inInitiative = true;
+                // (Optionally update name from live label/name)
+                const displayName =
+                    (isImage(it) && (it as any).text?.plainText) || (it as any).name || current.name || "Unnamed";
+                current.name = displayName;
             }
         });
 
@@ -599,9 +583,7 @@ export function InitiativeTracker() {
                         (
                             <PlayerTable
                                 items={sortedRows.filter((r) => r.visible !== false)}
-                                showHealthStatus={settings.displayHealthStatusToPlayer}
-                                showHealthNumber={settings.displayPlayerHealthNumbers}
-                                showDistances={settings.showDistances}
+                                settings={settings}
                                 tokens={cmTokens}
                             />
                         )

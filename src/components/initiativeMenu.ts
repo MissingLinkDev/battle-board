@@ -15,7 +15,10 @@ export function registerInitiativeContextMenu() {
                         { key: "layer", value: "CHARACTER", coordinator: "||" },
                         { key: "layer", value: "MOUNT" },
                         { key: "type", value: "IMAGE" },
-                        { key: ["metadata", META_KEY], value: undefined },
+
+                        // (meta === undefined) OR (inInitiative === false)
+                        { key: ["metadata", META_KEY], value: undefined, coordinator: "||" },
+                        { key: ["metadata", META_KEY, "inInitiative"], value: false },
                     ],
                     permissions: ["UPDATE"],
                     roles: ["GM"],
@@ -29,6 +32,12 @@ export function registerInitiativeContextMenu() {
                         { key: "layer", value: "CHARACTER", coordinator: "||" },
                         { key: "layer", value: "MOUNT" },
                         { key: "type", value: "IMAGE" },
+
+                        // has meta (meta != undefined)
+                        { key: ["metadata", META_KEY], value: undefined, operator: "!=" },
+
+                        // not explicitly out of initiative (inInitiative != false)
+                        { key: ["metadata", META_KEY, "inInitiative"], value: false, operator: "!=" },
                     ],
                     permissions: ["UPDATE"],
                     roles: ["GM"],
@@ -38,13 +47,26 @@ export function registerInitiativeContextMenu() {
         onClick(context) {
             (async () => {
                 await OBR.scene.items.updateItems(context.items, (items) => {
-                    const add = items.every((it) => (it.metadata as any)[META_KEY] === undefined);
+                    // Is this an ADD action? (no meta or meta.inInitiative === false)
+                    const isAdd = items.every((it) => {
+                        const meta = (it.metadata as any)[META_KEY];
+                        return meta === undefined || meta?.inInitiative === false;
+                    });
 
                     for (const it of items) {
-                        if (add) {
-                            (it.metadata as any)[META_KEY] = createMetaForItem(it);
+                        const meta = (it.metadata as any)[META_KEY];
+                        if (isAdd) {
+                            if (!meta) {
+                                (it.metadata as any)[META_KEY] = { ...createMetaForItem(it), inInitiative: true }; // create + mark in
+                            } else {
+                                meta.inInitiative = true; // revive existing config
+                            }
                         } else {
-                            delete (it.metadata as any)[META_KEY];
+                            if (meta) {
+                                // keep everything, just mark out
+                                meta.inInitiative = false;
+                                meta.active = false; // sanity: ensure not active
+                            }
                         }
                     }
                 });

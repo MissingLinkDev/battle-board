@@ -1,23 +1,31 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import IconButton from "@mui/material/IconButton";
 import ArrowBackRounded from "@mui/icons-material/ArrowBackRounded";
 import Divider from "@mui/material/Divider";
-import FormGroup from "@mui/material/FormGroup";
-import FormControlLabel from "@mui/material/FormControlLabel";
 import Switch from "@mui/material/Switch";
 import Paper from "@mui/material/Paper";
 import DeleteForeverRounded from "@mui/icons-material/DeleteForever";
 import OBR from "@owlbear-rodeo/sdk";
+import Button from "@mui/material/Button";
+import Accordion from "@mui/material/Accordion";
+import AccordionSummary from "@mui/material/AccordionSummary";
+import AccordionDetails from "@mui/material/AccordionDetails";
+import ExpandMoreRounded from "@mui/icons-material/ExpandMoreRounded";
+import Select from "@mui/material/Select";
+import MenuItem from "@mui/material/MenuItem";
 
 import type { InitiativeSettings } from "./SceneState";
 import { META_KEY, isMetadata } from "./metadata";
 import { ensureRings, clearRings } from "./rings";
-import Button from "@mui/material/Button";
 import type { InitiativeItem } from "./InitiativeItem";
+import CircularProgress from "@mui/material/CircularProgress";
 
+/* ------------------------------------------------------------------ */
+/* Types                                                               */
+/* ------------------------------------------------------------------ */
 type Props = {
     value: InitiativeSettings;
     onChange: (next: InitiativeSettings) => void;
@@ -37,44 +45,224 @@ type MetaForRings = {
     movementPattern?: "solid" | "dash" | null;
     rangePattern?: "solid" | "dash" | null;
     movementOpacity?: number | null; // 0..1
-    rangeOpacity?: number | null;    // 0..1
+    rangeOpacity?: number | null; // 0..1
 };
+
+/* ------------------------------------------------------------------ */
+/* Helpers / mini components                                           */
+/* ------------------------------------------------------------------ */
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+    return (
+        <Typography
+            sx={{
+                fontWeight: 800,
+                textTransform: "uppercase",
+                letterSpacing: ".08em",
+                color: "text.secondary",
+                fontSize: "0.72rem",
+                px: 1,
+                mb: 0.5,
+            }}
+        >
+            {children}
+        </Typography>
+    );
+}
+
+function RowShell({
+    title,
+    description,
+    right,
+    dense,
+}: {
+    title: string;
+    description?: string;
+    right: React.ReactNode;
+    dense?: boolean;
+}) {
+    return (
+        <Box
+            sx={{
+                display: "flex",
+                gap: 1,
+                alignItems: "center",
+                justifyContent: "space-between",
+                px: 1,
+                py: dense ? 0.5 : 1,
+                maxWidth: "100%",
+                overflow: "hidden",
+            }}
+        >
+            <Box sx={{ minWidth: 0, overflow: "hidden" }}>
+                <Typography
+                    sx={{
+                        fontWeight: 600,
+                        fontSize: dense ? "0.85rem" : "0.9rem",
+                        lineHeight: 1.15,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                    }}
+                    title={title}
+                >
+                    {title}
+                </Typography>
+                {description ? (
+                    <Typography
+                        sx={{
+                            color: "text.secondary",
+                            fontSize: dense ? "0.7rem" : "0.75rem",
+                            lineHeight: 1.1,
+                            mt: 0.25,
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                        }}
+                        title={description}
+                    >
+                        {description}
+                    </Typography>
+                ) : null}
+            </Box>
+            <Box sx={{ flex: "0 0 auto", maxWidth: "45%", display: "flex", alignItems: "center" }}>
+                {right}
+            </Box>
+        </Box>
+    );
+}
+
+function Toggle({
+    checked,
+    onChange,
+    "aria-label": ariaLabel,
+}: {
+    checked: boolean;
+    onChange: (next: boolean) => void;
+    "aria-label"?: string;
+}) {
+    return (
+        <Switch
+            size="small"
+            checked={!!checked}
+            onChange={(e) => onChange(e.target.checked)}
+            inputProps={{ "aria-label": ariaLabel ?? "toggle setting" }}
+        />
+    );
+}
+
+/* Compact Select for health mode */
+function HealthModeSelect({
+    value,
+    onChange,
+    width = 120,
+}: {
+    value: "none" | "status" | "numbers";
+    onChange: (next: "none" | "status" | "numbers") => void;
+    width?: number;
+}) {
+    return (
+        <Select
+            size="small"
+            value={value}
+            onChange={(e) => onChange(e.target.value as any)}
+            sx={{
+                width,
+                "& .MuiSelect-select": { py: 0.5 },
+            }}
+            MenuProps={{ disableScrollLock: true }}
+        >
+            <MenuItem value="none">None</MenuItem>
+            <MenuItem value="status">Status</MenuItem>
+            <MenuItem value="numbers">Numbers</MenuItem>
+        </Select>
+    );
+}
+
+function ConfirmProgress({ value, size = 18 }: { value: number; size?: number }) {
+    return (
+        <Box sx={{ position: "relative", width: size, height: size }}>
+            <CircularProgress
+                variant="determinate"
+                value={100}
+                size={size}
+                thickness={10}
+                sx={{ color: "action.disabledBackground", position: "absolute", inset: 0 }}
+            />
+            <CircularProgress
+                variant="determinate"
+                value={Math.max(0, Math.min(100, value))}
+                size={size}
+                thickness={10}
+                sx={{ position: "absolute", inset: 0 }}
+            />
+        </Box>
+    );
+}
+
+/* ------------------------------------------------------------------ */
+/* Component                                                           */
+/* ------------------------------------------------------------------ */
 
 export default function SettingsView({ value, onChange, onBack, rows }: Props) {
     const rootRef = useRef<HTMLDivElement | null>(null);
-
     const hasInitiative = (rows?.length ?? 0) > 0;
 
-    const set = (patch: Partial<InitiativeSettings>) =>
-        onChange({ ...value, ...patch });
+    const set = (patch: Partial<InitiativeSettings>) => onChange({ ...value, ...patch });
 
-    const Rows = useMemo(
-        () => [
-            {
-                title: "Initiative List",
-                options: [
-                    ["Armor", "showArmor"],
-                    ["HP", "showHP"],
-                    // ["Movement Range", "showMovementRange"],
-                    // ["Attack Range", "showAttackRange"],
-                    ["Distances", "showDistances"],
-                    ["DM Distance Rings Toggle", "dmRingToggle"],
-                ] as const,
-            },
-            {
-                title: "Gameplay",
-                options: [
-                    ["Disable Player Initiative List", "disablePlayerList"],
-                    ["Display Health Status to Player", "displayHealthStatusToPlayer"],
-                    ["Display Player Health Numbers to Players", "displayPlayerHealthNumbers"],
-                    ["Show Range Rings for Player Characters on turn", "showRangeRings"],
-                ] as const,
-            },
-        ],
-        []
-    );
+    // Local expansion state for sub-categories
+    const [openDisplayColumns, setOpenDisplayColumns] = useState(false);
+    const [openDisplayInfo, setOpenDisplayInfo] = useState(false);
+    const [openPlayerColumns, setOpenPlayerColumns] = useState(false);
 
-    // Observe the whole panel and size action height to its exact rendered height.
+    //Local for confirm ring
+    const [confirming, setConfirming] = useState(false);
+    const [progress, setProgress] = useState(100); // 100 → 0
+    const confirmDeadlineRef = useRef<number | null>(null);
+    const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const CONFIRM_MS = 4000;
+
+    const stopInterval = () => {
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+        }
+    };
+
+    const cancelConfirm = () => {
+        stopInterval();
+        confirmDeadlineRef.current = null;
+        setConfirming(false);
+        setProgress(100);
+    };
+
+    const startConfirm = () => {
+        if (intervalRef.current) return; // already counting
+        setConfirming(true);
+        setProgress(100);
+        confirmDeadlineRef.current = performance.now() + CONFIRM_MS;
+
+        intervalRef.current = setInterval(() => {
+            const end = confirmDeadlineRef.current;
+            if (!end) {
+                cancelConfirm();
+                return;
+            }
+            const now = performance.now();
+            const remaining = Math.max(0, end - now);
+            const pct = (remaining / CONFIRM_MS) * 100;
+            setProgress(pct);
+
+            if (remaining <= 0) {
+                cancelConfirm(); // auto-revert
+            }
+        }, 80); // smooth enough; light on CPU
+    };
+
+    // cleanup on unmount
+    useEffect(() => () => stopInterval(), []);
+
+    // --- Resize to content
     useEffect(() => {
         if (!rootRef.current || typeof ResizeObserver === "undefined") return;
 
@@ -93,18 +281,17 @@ export default function SettingsView({ value, onChange, onBack, rows }: Props) {
         };
     }, []);
 
+    // --- Keep your rings sync effect
     useEffect(() => {
         let cancelled = false;
 
         const refreshRingsFromSettings = async () => {
             try {
-                // If rings are globally hidden or neither type is enabled → nuke any shown rings
                 if (!value.showRangeRings || (!value.showMovementRange && !value.showAttackRange)) {
                     await clearRings("normal");
                     return;
                 }
 
-                // Find the currently active creature
                 const items = await OBR.scene.items.getItems();
                 if (cancelled) return;
 
@@ -113,7 +300,6 @@ export default function SettingsView({ value, onChange, onBack, rows }: Props) {
                     return isMetadata?.(meta) && meta.active === true;
                 });
 
-                // No active → just clear (prevents stale rings hanging around)
                 if (!active) {
                     await clearRings("normal");
                     return;
@@ -121,24 +307,19 @@ export default function SettingsView({ value, onChange, onBack, rows }: Props) {
 
                 const meta = ((active.metadata as any)[META_KEY] ?? {}) as MetaForRings;
 
-                // If the toggle is "Show Range Rings for Player Characters", do nothing for non‑PCs
                 if (!meta?.playerCharacter) {
                     await clearRings("normal");
                     return;
                 }
 
-                // Only pass through the ring types that are enabled
                 await ensureRings({
-                    // identity / wiring
                     tokenId: active.id,
                     variant: "normal",
                     visible: true,
                     moveAttached: false,
                     rangeAttached: true,
-                    // distances (respect settings switches)
                     movement: value.showMovementRange ? (meta.movement ?? 0) : 0,
                     attackRange: value.showAttackRange ? (meta.attackRange ?? 0) : 0,
-                    // style (pull entirely from metadata; fall back to your defaults)
                     movementColor: meta.movementColor ?? "#519e00",
                     rangeColor: meta.rangeColor ?? "#fe4c50",
                     movementWeight: meta.movementWeight ?? 12,
@@ -153,9 +334,7 @@ export default function SettingsView({ value, onChange, onBack, rows }: Props) {
             }
         };
 
-        // Run whenever any of the three switches change
         refreshRingsFromSettings();
-
         return () => {
             cancelled = true;
         };
@@ -167,8 +346,11 @@ export default function SettingsView({ value, onChange, onBack, rows }: Props) {
             const ids = items.map((it) => it.id);
             await OBR.scene.items.updateItems(ids, (items) => {
                 for (const it of items) {
-                    if ((it.metadata as any)[META_KEY]) {
-                        delete (it.metadata as any)[META_KEY];
+                    const meta = (it.metadata as any)[META_KEY];
+                    if (meta) {
+                        meta.initiative = 0;
+                        meta.active = false;
+                        meta.inInitiative = false;
                     }
                 }
             });
@@ -177,67 +359,252 @@ export default function SettingsView({ value, onChange, onBack, rows }: Props) {
         }
     };
 
+    // Resolve UI defaults without forcing state writes yet
+    const pcHealthMode = ((value as any).pcHealthMode ?? "numbers") as "none" | "status" | "numbers";
+    const npcHealthMode = ((value as any).npcHealthMode ?? "status") as "none" | "status" | "numbers";
+
     return (
-        <Paper ref={rootRef} sx={{ borderRadius: 0 }}>
+        <Paper ref={rootRef} sx={{ borderRadius: 0, overflowX: "hidden" }}>
             {/* Header */}
-            <Box sx={{ px: 1, py: 1, display: "flex", alignItems: "center", gap: 1 }}>
+            <Box sx={{ px: 1, py: 0.75, display: "flex", alignItems: "center", gap: 1 }}>
                 <IconButton size="small" onClick={onBack}>
                     <ArrowBackRounded />
                 </IconButton>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: "0.95rem" }}>
                     Settings
                 </Typography>
             </Box>
             <Divider />
 
             {/* Content */}
-            <Box sx={{ p: 2 }}>
-                <Stack spacing={3}>
-                    {Rows.map((group) => (
-                        <Box key={group.title}>
-                            <Typography
-                                sx={{
-                                    fontWeight: 700,
-                                    mb: 1,
-                                    textAlign: "center",
-                                    fontSize: "1.1rem",
-                                }}
-                            >
-                                {group.title}
-                            </Typography>
-                            <FormGroup>
-                                {group.options.map(([label, key]) => (
-                                    <FormControlLabel
-                                        key={key}
-                                        control={
-                                            <Switch
-                                                size="medium"
-                                                checked={(value as any)[key]}
-                                                onChange={(e) =>
-                                                    set({ [key]: e.target.checked } as any)
-                                                }
+            <Box sx={{ p: 1 }}>
+                <Stack spacing={2}>
+                    {/* ===================== Display Settings ===================== */}
+                    <Box>
+                        <SectionTitle>Display Settings</SectionTitle>
+
+                        {/* Columns (Accordion) */}
+                        <Accordion
+                            elevation={0}
+                            disableGutters
+                            square
+                            expanded={openDisplayColumns}
+                            onChange={(_, exp) => setOpenDisplayColumns(exp)}
+                            sx={{
+                                border: (t) => `1px solid ${t.palette.divider}`,
+                                borderRadius: 1,
+                                "&:before": { display: "none" },
+                            }}
+                        >
+                            <AccordionSummary expandIcon={<ExpandMoreRounded />} sx={{ px: 1, minHeight: 38 }}>
+                                <Typography sx={{ fontWeight: 700, fontSize: "0.85rem" }}>Columns</Typography>
+                            </AccordionSummary>
+                            <AccordionDetails sx={{ p: 0 }}>
+                                <RowShell
+                                    title="Armor"
+                                    description="Show AC column."
+                                    right={
+                                        <Toggle
+                                            checked={!!value.showArmor}
+                                            onChange={(next) => set({ showArmor: next })}
+                                            aria-label="toggle-armor"
+                                        />
+                                    }
+                                />
+                                <Divider />
+                                <RowShell
+                                    title="HP"
+                                    description="Show HP columns."
+                                    right={
+                                        <Toggle
+                                            checked={!!value.showHP}
+                                            onChange={(next) => set({ showHP: next })}
+                                            aria-label="toggle-hp"
+                                        />
+                                    }
+                                />
+                                <Divider />
+                                <RowShell
+                                    title="Range Ring Toggle"
+                                    description="Show DM ring button."
+                                    right={
+                                        <Toggle
+                                            checked={!!value.dmRingToggle}
+                                            onChange={(next) => set({ dmRingToggle: next })}
+                                            aria-label="toggle-dm-ring-toggle"
+                                        />
+                                    }
+                                />
+                            </AccordionDetails>
+                        </Accordion>
+
+                        {/* Info Panel (Accordion) */}
+                        <Accordion
+                            elevation={0}
+                            disableGutters
+                            square
+                            expanded={openDisplayInfo}
+                            onChange={(_, exp) => setOpenDisplayInfo(exp)}
+                            sx={{
+                                border: (t) => `1px solid ${t.palette.divider}`,
+                                borderRadius: 1,
+                                mt: 1,
+                                "&:before": { display: "none" },
+                            }}
+                        >
+                            <AccordionSummary expandIcon={<ExpandMoreRounded />} sx={{ px: 1, minHeight: 38 }}>
+                                <Typography sx={{ fontWeight: 700, fontSize: "0.85rem" }}>Info Panel</Typography>
+                            </AccordionSummary>
+                            <AccordionDetails sx={{ p: 0 }}>
+                                <RowShell
+                                    title="Distances"
+                                    description="Show distances table."
+                                    right={
+                                        <Toggle
+                                            checked={!!value.showDistances}
+                                            onChange={(next) => set({ showDistances: next })}
+                                            aria-label="toggle-distances"
+                                        />
+                                    }
+                                />
+                            </AccordionDetails>
+                        </Accordion>
+                    </Box>
+
+                    {/* ========================== Gameplay ======================== */}
+                    <Box>
+                        <SectionTitle>Gameplay</SectionTitle>
+
+                        {/* Player Initiative List (flipped logic: SHOW when true, HIDE when false) */}
+                        <Box
+                            sx={{
+                                borderRadius: 1,
+                                overflow: "hidden",
+                                border: (t) => `1px solid ${t.palette.divider}`,
+                                mb: 1,
+                            }}
+                        >
+                            <RowShell
+                                title="Player Initiative List"
+                                description="Show list to players."
+                                right={
+                                    <Toggle
+                                        checked={!value.disablePlayerList /* show when ON */}
+                                        onChange={(next) => set({ disablePlayerList: !next })}
+                                        aria-label="toggle-player-list-show"
+                                    />
+                                }
+                            />
+                        </Box>
+
+                        {/* Player Columns (Accordion) */}
+                        <Accordion
+                            elevation={0}
+                            disableGutters
+                            square
+                            expanded={openPlayerColumns}
+                            onChange={(_, exp) => setOpenPlayerColumns(exp)}
+                            sx={{
+                                border: (t) => `1px solid ${t.palette.divider}`,
+                                borderRadius: 1,
+                                "&:before": { display: "none" },
+                            }}
+                        >
+                            <AccordionSummary expandIcon={<ExpandMoreRounded />} sx={{ px: 1, minHeight: 38 }}>
+                                <Typography sx={{ fontWeight: 700, fontSize: "0.85rem" }}>Player Columns</Typography>
+                            </AccordionSummary>
+                            <AccordionDetails sx={{ p: 0 }}>
+                                {/* Health Status row with inline expanded panel (borderless) */}
+                                <Box sx={{ position: "relative" }}>
+                                    <RowShell
+                                        title="Health Status"
+                                        description="Allow player health info."
+                                        right={
+                                            <Toggle
+                                                checked={!!value.displayHealthStatusToPlayer}
+                                                onChange={(next) => set({ displayHealthStatusToPlayer: next })}
+                                                aria-label="toggle-health-status"
                                             />
                                         }
-                                        label={<Typography sx={{ fontSize: "0.95rem" }}>{label}</Typography>}
-                                        sx={{ mx: 2 }}
                                     />
-                                ))}
-                            </FormGroup>
-                        </Box>
-                    ))}
+                                    {value.displayHealthStatusToPlayer ? (
+                                        <Box
+                                            sx={{
+                                                px: 1,
+                                                pb: 0.5,
+                                                pt: 0,
+                                                display: "grid",
+                                                rowGap: 0.25,
+                                                maxWidth: "100%",
+                                            }}
+                                        >
+                                            <RowShell
+                                                dense
+                                                title="Player Characters"
+                                                description="PC health shown."
+                                                right={
+                                                    <HealthModeSelect
+                                                        value={pcHealthMode}
+                                                        onChange={(next) => set({ pcHealthMode: next } as any)}
+                                                    />
+                                                }
+                                            />
+                                            <RowShell
+                                                dense
+                                                title="NPCs"
+                                                description="NPC health shown."
+                                                right={
+                                                    <HealthModeSelect
+                                                        value={npcHealthMode}
+                                                        onChange={(next) => set({ npcHealthMode: next } as any)}
+                                                    />
+                                                }
+                                            />
+                                        </Box>
+                                    ) : null}
+                                </Box>
+
+                                {/* Range Rings (independent row) */}
+                                <Divider />
+                                <RowShell
+                                    title="Range Rings"
+                                    description="PC rings on turn."
+                                    right={
+                                        <Toggle
+                                            checked={!!value.showRangeRings}
+                                            onChange={(next) => set({ showRangeRings: next })}
+                                            aria-label="toggle-show-range-rings"
+                                        />
+                                    }
+                                />
+                            </AccordionDetails>
+                        </Accordion>
+                    </Box>
                 </Stack>
             </Box>
-            <Divider sx={{ my: 2 }} />
-            <Box sx={{ textAlign: "center", p: 2 }}>
+
+            <Divider sx={{ my: 1.5 }} />
+            <Box sx={{ textAlign: "center", p: 1.5 }}>
                 <Button
                     variant="contained"
                     color="error"
                     startIcon={<DeleteForeverRounded />}
-                    onClick={handleClearAll}
+                    endIcon={confirming ? <ConfirmProgress value={progress} /> : null}
+                    onClick={async () => {
+                        const end = confirmDeadlineRef.current;
+                        if (confirming && end && performance.now() < end) {
+                            // confirmed during window
+                            cancelConfirm();
+                            await handleClearAll();
+                        } else {
+                            startConfirm();
+                        }
+                    }}
                     disabled={!hasInitiative}
                 >
-                    Clear All from Initiative
+                    {confirming ? "Confirm" : "Clear All from Initiative"}
                 </Button>
+
             </Box>
         </Paper>
     );

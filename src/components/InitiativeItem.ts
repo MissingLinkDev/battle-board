@@ -30,6 +30,7 @@ export type InitiativeItem = {
 export function initiativeFromItem(item: Item): InitiativeItem | null {
     const meta = (item.metadata as any)?.[META_KEY];
     if (!isMetadata(meta)) return null;
+    if (meta.inInitiative === false) return null;
 
     const img = item as any; // Image extends Item
     const liveLabel: string | undefined = img?.text?.plainText;
