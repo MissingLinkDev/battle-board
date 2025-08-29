@@ -1,25 +1,44 @@
 // utils.ts
+import OBR from "@owlbear-rodeo/sdk";
 import type { InitiativeItem } from "./InitiativeItem";
 import type { CMToken } from "./tokens";
-import OBR from "@owlbear-rodeo/sdk";
 
-export type GridInfo = { dpi: number; unitsPerCell: number };
+/* =========================
+   Grid helpers
+   ========================= */
+
+export type GridInfo = {
+    dpi: number;
+    unitsPerCell: number;   // e.g., 5
+    unitLabel: string;      // e.g., "ft"
+};
 
 let _gridInfoCache: GridInfo | null = null;
 export async function getGridInfo(): Promise<GridInfo> {
     if (_gridInfoCache) return _gridInfoCache;
+
     const [dpi, scale] = await Promise.all([
         OBR.scene.grid.getDpi(),
         OBR.scene.grid.getScale(),
     ]);
-    const unitsPerCell = scale.parsed?.multiplier ?? 5; // default to 5 ft per cell
-    _gridInfoCache = { dpi, unitsPerCell };
+
+    // In current OBR SDK, scale.parsed?.multiplier and scale.parsed?.unit hold what we want.
+    const unitsPerCell = scale.parsed?.multiplier ?? 5;
+    const unitLabel = (scale.parsed?.unit ?? "ft").toString();
+
+    _gridInfoCache = { dpi, unitsPerCell, unitLabel };
     return _gridInfoCache;
+}
+
+export function getCachedGridUnits() {
+    // returns latest fetched grid units or safe defaults
+    return _gridInfoCache
+        ? { unitLabel: _gridInfoCache.unitLabel, unitsPerCell: _gridInfoCache.unitsPerCell }
+        : { unitLabel: "ft", unitsPerCell: 5 };
 }
 
 /** Convert pixels → scene units (e.g., feet). */
 export function pixelsToUnits(px: number, grid: GridInfo): number {
-    // px / (px per cell) * (units per cell)
     return (px / grid.dpi) * grid.unitsPerCell;
 }
 
@@ -28,26 +47,30 @@ export function unitsToPixels(units: number, grid: GridInfo): number {
     return (units / grid.unitsPerCell) * grid.dpi;
 }
 
-/** Round to nearest foot (or unit). */
+/* =========================
+   Distance labels
+   ========================= */
+
 export function formatFeet(n: number): number {
     return Math.round(n);
 }
 
-/** UI label helper: "<5 ft" => "Touch", else "N ft" (rounded). */
-export function formatDistanceLabel(feet: number): string {
-    if (feet < 5) return "Touch";
-    return `${Math.round(feet)} ft`;
+/** Label helper with unit: "<multiplier unit" => "Touch", else "N unit" (rounded). */
+export function formatDistanceLabel(valueInUnits: number, unit: string = "ft", touchThresholdUnits: number = 5): string {
+    if (valueInUnits < touchThresholdUnits) return "Touch";
+    return `${Math.round(valueInUnits)} ${unit}`;
 }
 
-/* ------------------------------------------------------------------ */
-/*                  BOX EDGE-TO-EDGE DISTANCE (NEW)                   */
-/* ------------------------------------------------------------------ */
+/* =========================
+   Token box + OBR distance
+   ========================= */
 
+/** Axis-aligned token rectangle in scene pixels. */
 export type BoxPx = {
-    cx: number;        // center x in scene pixels
-    cy: number;        // center y in scene pixels
-    width: number;     // width in scene pixels
-    height: number;    // height in scene pixels
+    cx: number;   // center x (pixels)
+    cy: number;   // center y (pixels)
+    width: number;
+    height: number;
 };
 
 /** Build an axis-aligned rectangle (AABB) in pixels from a CMToken. */
@@ -60,87 +83,66 @@ export function tokenToBoxPx(token: CMToken, grid: GridInfo): BoxPx {
     };
 }
 
-/**
- * Minimal edge-to-edge distance between two axis-aligned rectangles (pixels).
- * Returns 0 when boxes overlap or touch (D&D "they fill their square").
- */
-export function edgeToEdgeDistancePx(a: BoxPx, b: BoxPx): number {
-    const ax1 = a.cx - a.width / 2;
-    const ax2 = a.cx + a.width / 2;
-    const ay1 = a.cy - a.height / 2;
-    const ay2 = a.cy + a.height / 2;
+const _clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
-    const bx1 = b.cx - b.width / 2;
-    const bx2 = b.cx + b.width / 2;
-    const by1 = b.cy - b.height / 2;
-    const by2 = b.cy + b.height / 2;
+/** Nearest points on A and B (AABBs) in pixels for edge-to-edge measurement. */
+export function closestPointsOnAABBsPx(
+    a: BoxPx,
+    b: BoxPx
+): { aPx: { x: number; y: number }; bPx: { x: number; y: number } } {
+    const ax1 = a.cx - a.width / 2, ax2 = a.cx + a.width / 2;
+    const ay1 = a.cy - a.height / 2, ay2 = a.cy + a.height / 2;
 
-    // Separation along each axis (0 if overlapping on that axis)
-    const dx = Math.max(0, Math.max(ax1 - bx2, bx1 - ax2));
-    const dy = Math.max(0, Math.max(ay1 - by2, by1 - ay2));
+    const bx1 = b.cx - b.width / 2, bx2 = b.cx + b.width / 2;
+    const by1 = b.cy - b.height / 2, by2 = b.cy + b.height / 2;
 
-    // Hypotenuse for diagonal separation
-    return Math.hypot(dx, dy);
+    const aPx = { x: _clamp(b.cx, ax1, ax2), y: _clamp(b.cy, ay1, ay2) };
+    const bPx = { x: _clamp(a.cx, bx1, bx2), y: _clamp(a.cy, by1, by2) };
+
+    return { aPx, bPx };
 }
 
-/**
- * Distance between two CM tokens in **grid units (feet)**.
- * mode = "box": closest edge-to-edge of creature boxes (AABB).
- * mode = "center": center-to-center (no radii subtraction).
- */
 export type TokenDistanceMode = "box" | "center";
 
-export function distanceBetweenTokensUnits(
+/**
+ * Distance between two CM tokens in scene units (e.g., feet), using Owlbear’s
+ * current measurement style (Chebyshev/Alternating/Manhattan/Euclidean) and scale.
+ * - mode="box": nearest edge-to-edge of the token squares (recommended).
+ * - mode="center": center-to-center.
+ */
+export async function obrDistanceBetweenTokensUnits(
     a: CMToken,
     b: CMToken,
-    grid: GridInfo,
     mode: TokenDistanceMode = "box"
-): number {
+): Promise<number> {
     if (mode === "center") {
-        const dx = a.position.x - b.position.x;
-        const dy = a.position.y - b.position.y;
-        return pixelsToUnits(Math.hypot(dx, dy), grid);
+        return OBR.scene.grid.getDistance(
+            { x: a.position.x, y: a.position.y },
+            { x: b.position.x, y: b.position.y }
+        );
     }
 
-    // "box" mode
+    const grid = await getGridInfo();
     const ra = tokenToBoxPx(a, grid);
     const rb = tokenToBoxPx(b, grid);
-    const px = edgeToEdgeDistancePx(ra, rb);
-    return pixelsToUnits(px, grid);
+    const { aPx, bPx } = closestPointsOnAABBsPx(ra, rb);
+    const cells = await OBR.scene.grid.getDistance(aPx, bPx);
+    return cells * grid.unitsPerCell;
 }
 
-/* ------------------------------------------------------------------ */
-/*                  LEGACY POINT DISTANCE (KEPT)                      */
-/* ------------------------------------------------------------------ */
-
-export type DistanceMode = "center" | "edge";
-
-/**
- * Legacy distance function:
- * - mode="center": center-to-center distance (in units)
- * - mode="edge": subtracts circular radii (in units), clamped to 0
- *
- * Prefer `distanceBetweenTokensUnits` with mode "box" for D&D squares.
- */
-export function distanceInUnits(
-    a: { x: number; y: number },
-    b: { x: number; y: number },
-    grid: GridInfo,
-    mode: DistanceMode = "center",
-    radii?: { radiusAUnits?: number; radiusBUnits?: number }
-): number {
-    const dx = a.x - b.x;
-    const dy = a.y - b.y;
-    const center = pixelsToUnits(Math.hypot(dx, dy), grid);
-
-    if (mode === "center") return center;
-
-    const rA = radii?.radiusAUnits ?? 0;
-    const rB = radii?.radiusBUnits ?? 0;
-    return Math.max(0, center - (rA + rB));
+/** Convenience wrapper for arbitrary pixel points. Returns scene units. */
+export async function obrDistanceBetweenPointsUnits(
+    fromPx: { x: number; y: number },
+    toPx: { x: number; y: number }
+): Promise<number> {
+    const grid = await getGridInfo();
+    const cells = await OBR.scene.grid.getDistance(fromPx, toPx);
+    return cells * grid.unitsPerCell;
 }
 
-/* -------------------- Sorting / math utils (kept) -------------------- */
+/* =========================
+   Sorting / small math utils
+   ========================= */
 
 export function sortByInitiativeDesc(list: InitiativeItem[]) {
     return [...list].sort((a, b) => {
@@ -150,14 +152,9 @@ export function sortByInitiativeDesc(list: InitiativeItem[]) {
         const af = Math.floor(ai);
         const bf = Math.floor(bi);
 
-        // Primary: higher integer bucket first (15 before any 14.x)
-        if (bf !== af) return bf - af;
-
-        // Secondary (same integer): smaller decimal first (14 before 14.1 before 14.2)
-        if (ai !== bi) return ai - bi;
-
-        // Tertiary: stable fallback so order doesn’t jump around on ties
-        return (a.name ?? "").localeCompare(b.name ?? "");
+        if (bf !== af) return bf - af;            // higher integer bucket first
+        if (ai !== bi) return ai - bi;            // then smaller decimal first
+        return (a.name ?? "").localeCompare(b.name ?? ""); // stable by name
     });
 }
 

@@ -25,7 +25,7 @@ import { CommitNumberField } from "./CommitFields";
 import { ensureRings, clearRingsFor } from "./rings";
 import ColorPicker from "./ColorPicker";
 import type { CMToken } from "./tokens";
-import { getGridInfo, formatFeet, type TokenDistanceMode, distanceBetweenTokensUnits, formatDistanceLabel } from "./utils";
+import { formatFeet, type TokenDistanceMode, formatDistanceLabel, obrDistanceBetweenTokensUnits, getCachedGridUnits } from "./utils";
 
 type RowSettings = {
     showMovementRange: boolean;
@@ -85,7 +85,9 @@ export default function InitiativeRow({
     const [rangeOpacity, setRangeOpacity] = useState<number>(row.rangeOpacity ?? 1);
 
     // distances + dm preview
-    const [distances, setDistances] = useState<{ id: string; name: string; ft: number }[]>([]);
+    const [distances, setDistances] = useState<{ id: string; name: string; ft: number; text: string }[]>([]);
+
+    const { unitLabel, unitsPerCell } = getCachedGridUnits();
     const [dmPreview, setDmPreview] = useState(!!row.dmPreview);
 
     // single reference for "did active state change?"
@@ -245,24 +247,27 @@ export default function InitiativeRow({
                 return;
             }
 
-            const grid = await getGridInfo();
             const modeSetting = (settings as any)?.distanceMode ?? "edge";
             const tokenMode: TokenDistanceMode = modeSetting === "edge" ? "box" : "center";
 
-            const list = tokens
-                .filter((t) => t.id !== row.id && t.visible !== false)
-                .map((t) => {
-                    const raw = distanceBetweenTokensUnits(me, t, grid, tokenMode); // feet
-                    return {
-                        id: t.id,
-                        name: t.name || "(unnamed)",
-                        ft: formatFeet(raw),          // numeric, good for sorting/comparisons
-                        text: formatDistanceLabel(raw) // "Touch" if <5, else "N ft"
-                    };
-                })
-                .sort((a, b) => a.ft - b.ft);
+            const list = await Promise.all(
+                tokens
+                    .filter((t) => t.id !== row.id && t.visible !== false)
+                    .map(async (t) => {
+                        const raw = await obrDistanceBetweenTokensUnits(me, t, tokenMode);
+                        // console.log("distance between", me.name, "and", t.name, "is", raw);
+                        return {
+                            id: t.id,
+                            name: t.name || "(unnamed)",
+                            ft: formatFeet(raw),
+                            text: formatDistanceLabel(raw, unitLabel, unitsPerCell),
+                        };
+                    })
+            );
 
-            if (!cancelled) setDistances(list);
+            if (!cancelled) {
+                setDistances(list.sort((a, b) => a.ft - b.ft));
+            }
         })();
 
         return () => {
@@ -822,7 +827,7 @@ export default function InitiativeRow({
                                                                 color: "text.secondary",
                                                             }}
                                                         >
-                                                            {d.ft < 5 ? "Touch" : `${d.ft} ft`}
+                                                            {d.text}
                                                         </Typography>
                                                     </ListItem>
                                                 ))

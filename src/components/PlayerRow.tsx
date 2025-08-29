@@ -16,7 +16,7 @@ import Tooltip from "@mui/material/Tooltip";
 import InfoRounded from "@mui/icons-material/InfoRounded";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
-import { distanceBetweenTokensUnits, formatDistanceLabel, formatFeet, getGridInfo, type TokenDistanceMode } from "./utils";
+import { formatDistanceLabel, formatFeet, getCachedGridUnits, obrDistanceBetweenTokensUnits, type TokenDistanceMode } from "./utils";
 import type { CMToken } from "./tokens";
 import type { InitiativeSettings } from "./SceneState";
 
@@ -50,7 +50,8 @@ export default function PlayerRow({
     const statusText = isBloodied ? "Bloodied" : "Healthy";
 
     //Distances
-    const [distances, setDistances] = useState<{ id: string; name: string; ft: number }[]>([]);
+    const [distances, setDistances] = useState<{ id: string; name: string; ft: number; text: string }[]>([]);
+    const { unitLabel, unitsPerCell } = getCachedGridUnits();
 
     // --------- derive health visibility for THIS row ----------
     const healthMasterOn = !!settings.displayHealthStatusToPlayer;
@@ -119,24 +120,25 @@ export default function PlayerRow({
                 setDistances([]);
                 return;
             }
-
-            const grid = await getGridInfo();
             const tokenMode: TokenDistanceMode = "box";
 
-            const list = tokens
-                .filter((t) => t.id !== row.id && t.visible !== false)
-                .map((t) => {
-                    const raw = distanceBetweenTokensUnits(me, t, grid, tokenMode); // feet
-                    return {
-                        id: t.id,
-                        name: t.name || "(unnamed)",
-                        ft: formatFeet(raw), // numeric
-                        text: formatDistanceLabel(raw), // "Touch" if <5, else "N ft"
-                    };
-                })
-                .sort((a, b) => a.ft - b.ft);
+            const list = await Promise.all(
+                tokens
+                    .filter((t) => t.id !== row.id && t.visible !== false)
+                    .map(async (t) => {
+                        const raw = await obrDistanceBetweenTokensUnits(me, t, tokenMode);
+                        return {
+                            id: t.id,
+                            name: t.name || "(unnamed)",
+                            ft: formatFeet(raw),
+                            text: formatDistanceLabel(raw, unitLabel, unitsPerCell),
+                        };
+                    })
+            );
 
-            if (!cancelled) setDistances(list);
+            if (!cancelled) {
+                setDistances(list.sort((a, b) => a.ft - b.ft));
+            }
         })();
 
         return () => {
@@ -313,7 +315,7 @@ export default function PlayerRow({
                                                         color: "text.secondary",
                                                     }}
                                                 >
-                                                    {d.ft < 5 ? "Touch" : `${d.ft} ft`}
+                                                    {d.text}
                                                 </Typography>
                                             </ListItem>
                                         ))

@@ -201,8 +201,16 @@ export async function ensureRings(opts: {
             if (existing) {
                 await OBR.scene.items.updateItems([existing.id], (items) => {
                     const it: any = items[0];
-                    it.width = diameterPx;
-                    it.height = diameterPx;
+                    if (!it) {
+                        // Item not hydrated yet (startup race); skip this pass.
+                        // Optionally schedule a one-shot retry with setTimeout(() => ensureRings(...), 0)
+                        return;
+                    }
+
+                    // width/height for ellipse rings (defensive check)
+                    if (typeof it.width === "number") it.width = diameterPx;
+                    if (typeof it.height === "number") it.height = diameterPx;
+
                     if (forceRecenter) it.position = center;
 
                     it.visible = visible;
@@ -218,6 +226,8 @@ export async function ensureRings(opts: {
                     s.strokeDash = strokeDash ?? [];
                     it.style = s;
 
+                    // make sure metadata object exists before writing your key
+                    it.metadata = { ...(it.metadata ?? {}) };
                     (it.metadata as any)[RING_META_KEY] = meta;
                 });
             } else {
