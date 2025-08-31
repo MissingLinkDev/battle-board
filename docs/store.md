@@ -33,16 +33,16 @@ You now have a live initiative list, complete with stats, overlays, and round ma
 
 - **Right-Click Context Menu**  
   - *Add to Battle Board* → adds selected tokens with default stats.
-  ![Add to BattleBoard](URL_HERE)  
+  ![Add to BattleBoard](https://battle-board.onrender.com/screenshots/add.png)  
   - *Remove from Battle Board* → removes selected tokens.
-  ![Remove from BattleBoard](URL_HERE)  
+  ![Remove from BattleBoard](https://battle-board.onrender.com/screenshots/remove.png)  
   
 
 - **Add All in Scene** → Adds every CHARACTER/MOUNT token.  
 - **Add Visible Only** → Adds only tokens currently visible to the GM. 
-![Add All Buttons](URL_HERE) 
+![Add All Buttons](https://battle-board.onrender.com/screenshots/addAllButtons.png) 
 - **Remove Individually** → Right-click a row → **Remove**.  
-![Remove Context Menu](URL_HERE)
+![Remove Context Menu](https://battle-board.onrender.com/screenshots/removeContext.png)
 
 ---
 
@@ -50,15 +50,15 @@ You now have a live initiative list, complete with stats, overlays, and round ma
 
 Each row is fully editable:
 
-- **Initiative** – click to edit. Supports decimals (see below).  
+- **Initiative** – click to edit. Supports decimals (see below). 
+- **Name** - Character name. 
 - **Armor Class (AC)** – inline editable.  
 - **HP** – edit *Current* / *Max* separately, with **math input** (`-3`, `+5`).  
   - Adjusting Max HP auto-adjusts Current HP (clamped if needed).  
 - **Temp HP** – tracked separately.  
-- **Visibility** – tokens hidden in Owlbear show an eye-slash icon.  
-- **Player Character** – mark/unmark in the expanded panel (affects what players see).  
+- **DM Ring Preview** – toggles hidden range rings for DM only.  
 
-![Standard Row](URL_HERE)
+![Standard Row](https://battle-board.onrender.com/screenshots/initiativeRow.png)
 
 ---
 
@@ -85,6 +85,19 @@ Battle Board sorts initiative using a **bucket + tie-breaker system**:
 
 ---
 
+## Expanded Info Panels
+
+Click the chevron or name to expand a row.
+
+- **Player Character Toggle** – mark/unmark as PC.  
+- **Overlays** – full controls for rings (color, weight, dash, opacity).  
+- **Distances** – auto-calculated from **edge to edge**:
+  - `< 5 ft` displays as **Touch**.  
+  - Sorted shortest → longest.  
+- **Tooltip** explains: *“Measured edge-to-edge; attack range must be greater than distance. So if distance is 5ft, a 5ft attack range is not enough”*  
+
+![Info Panel](https://battle-board.onrender.com/screenshots/infoPanel.png)
+
 ## Movement & Attack Range Rings
 
 Battle Board can draw rings around tokens for tactical play.
@@ -100,25 +113,8 @@ Battle Board can draw rings around tokens for tactical play.
 - Opacity (0–100%)  
 
 ### Distance Controls
-- Enter values in **units** not **cells** for both **Movement** and **Attack Range** (i.e. 50 ft no 10 cells).  
+- Enter values in **units** not **cells** for both **Movement** and **Attack Range** (i.e. 50 ft not 10 cells).  
 - Rings resize automatically when stats are updated.  
-
-![Ring Controls](URL_HERE)
-
----
-
-## Expanded Info Panels
-
-Click the chevron or name to expand a row.
-
-- **Player Character Toggle** – mark/unmark as PC.  
-- **Overlays** – full controls for rings (color, weight, dash, opacity).  
-- **Distances** – auto-calculated from **edge to edge**:
-  - `< 5 ft` displays as **Touch**.  
-  - Sorted shortest → longest.  
-- **Tooltip** explains: *“Measured edge-to-edge; attack range must be greater than distance. So if distance is 5ft, a 5ft attack range is not enough”*  
-
-![Info Panel](URL_HERE)
 
 ---
 
@@ -133,21 +129,19 @@ At the bottom of the sidebar:
 - **Settings** ⚙️ → open extension options.  
 - **Patreon** ❤️ → support development.  
 
-![Round Controls](URL_HERE)
+![Round Controls](https://battle-board.onrender.com/screenshots/controlBar.png)
 
 ---
 
 ## Settings
 
 Accessible to the GM only.
+![Settings](https://battle-board.onrender.com/screenshots/settings.png)
 
 ### DM Display Settings
 - **Armor** – show/hide AC column  
-![Armor Column](URL_HERE)
 - **HP** – show/hide Current/Max/Temp HP columns 
-![HP Columns](URL_HERE) 
 - **DM Ring Toggle** – show/hide DM-only button 
-![DM Rings Toggle Column](URL_HERE) 
 
 ### Player Display Settings
 - **Display Health Status** – toggle health visibility column for all 
@@ -157,7 +151,6 @@ Accessible to the GM only.
 
 ### Info Panel Settings
 - **Distances** – show/hide distance panel  
-![Distances](URL_HERE)
 
 ### Gameplay
 - **Disable Player Initiative List** – hide list entirely from players  
@@ -175,7 +168,6 @@ Accessible to the GM only.
 
 ### Utility
 - **Clear All from Initiative** → removes all creatures and ends combat 
-![Clear all button](URL_HERE) 
 
 
 
@@ -184,16 +176,16 @@ Accessible to the GM only.
 ## Player View
 
 Players see a simplified tracker:
-![screenshot](URL_HERE)
+![Round Not Starter](https://battle-board.onrender.com/screenshots/playerViewNoCombat.png)
 
 - INIT + NAME  
 - Health info (if allowed by GM)  
 - Range rings (only for **active PCs** if enabled)  
-![screenshot](URL_HERE)
+![Player View](https://battle-board.onrender.com/screenshots/playerView.png)
 - If disabled, players see:  
   *“The DM has disabled the player initiative list.”*  
 
-![screenshot](URL_HERE)
+![Player View Disabled](https://battle-board.onrender.com/screenshots/DMdisabled.png)
 
 ---
 

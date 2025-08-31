@@ -631,8 +631,19 @@ export function InitiativeTracker() {
                                     </IconButton>
                                 </Tooltip>
                                 <Tooltip title="Patreon">
-                                    <IconButton size="small">
-                                        <Box component="img" src="/patreon-icon.png" alt="Patreon" sx={{ width: 20, height: 20 }} />
+                                    <IconButton
+                                        size="small"
+                                        component="a"
+                                        href="patreon.com/MissingLinkDev"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                    >
+                                        <Box
+                                            component="img"
+                                            src="/patreon-icon.png"
+                                            alt="Patreon"
+                                            sx={{ width: 20, height: 20 }}
+                                        />
                                     </IconButton>
                                 </Tooltip>
                             </Stack>
