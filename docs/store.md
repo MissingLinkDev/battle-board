@@ -33,15 +33,19 @@ You now have a live initiative list, complete with stats, overlays, and round ma
 
 - **Right-Click Context Menu**  
   - *Add to Battle Board* → adds selected tokens with default stats.
+
   ![Add to BattleBoard](https://battle-board.onrender.com/screenshots/add.png)  
   - *Remove from Battle Board* → removes selected tokens.
+
   ![Remove from BattleBoard](https://battle-board.onrender.com/screenshots/remove.png)  
   
 
 - **Add All in Scene** → Adds every CHARACTER/MOUNT token.  
 - **Add Visible Only** → Adds only tokens currently visible to the GM. 
+
 ![Add All Buttons](https://battle-board.onrender.com/screenshots/addAllButtons.png) 
 - **Remove Individually** → Right-click a row → **Remove**.  
+
 ![Remove Context Menu](https://battle-board.onrender.com/screenshots/removeContext.png)
 
 ---
@@ -136,6 +140,7 @@ At the bottom of the sidebar:
 ## Settings
 
 Accessible to the GM only.
+
 ![Settings](https://battle-board.onrender.com/screenshots/settings.png)
 
 ### DM Display Settings
@@ -176,11 +181,13 @@ Accessible to the GM only.
 ## Player View
 
 Players see a simplified tracker:
+
 ![Round Not Starter](https://battle-board.onrender.com/screenshots/playerViewNoCombat.png)
 
 - INIT + NAME  
 - Health info (if allowed by GM)  
 - Range rings (only for **active PCs** if enabled)  
+
 ![Player View](https://battle-board.onrender.com/screenshots/playerView.png)
 - If disabled, players see:  
   *“The DM has disabled the player initiative list.”*  
