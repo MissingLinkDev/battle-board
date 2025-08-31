@@ -2,14 +2,14 @@
 title: Battle Board
 description: A simple and clean initiative tracker with auto movement and range rings for quick distance references
 author: Missing Link Dev
-image: <put an image link here>
+image: https://battle-board.onrender.com/screenshots/example.png
 icon: https://battle-board.onrender.com/icon.svg
 tags:
   - tool
   - combat
   - automation
 manifest: https://battle-board.onrender.com/manifest.json
-learn-more: <link to patreon post with instructions>
+learn-more: https://www.patreon.com/posts/battle-board-v0-137782613?utm_medium=clipboard_copy&utm_source=copyLink&utm_campaign=postshare_creator&utm_content=join_link
 ---
 
 # Battle Board – How to Use
