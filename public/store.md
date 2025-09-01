@@ -9,7 +9,7 @@ tags:
   - combat
   - automation
 manifest: https://battle-board.onrender.com/manifest.json
-learn-more: https://www.patreon.com/posts/battle-board-v0-137782613?utm_medium=clipboard_copy&utm_source=copyLink&utm_campaign=postshare_creator&utm_content=join_link
+learn-more: https://github.com/MissingLinkDev/battle-board
 ---
 
 # Battle Board – How to Use

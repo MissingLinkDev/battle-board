@@ -1,5 +1,3 @@
-# React + TypeScript + Vite
-
 # Battle Board – How to Use
 
 Battle Board is an initiative tracker and combat manager for [Owlbear Rodeo](https://www.owlbear.rodeo).  

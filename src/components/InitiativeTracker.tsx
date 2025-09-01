@@ -634,7 +634,7 @@ export function InitiativeTracker() {
                                     <IconButton
                                         size="small"
                                         component="a"
-                                        href="patreon.com/MissingLinkDev"
+                                        href="https://www.patreon.com/MissingLinkDev"
                                         target="_blank"
                                         rel="noopener noreferrer"
                                     >
