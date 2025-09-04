@@ -47,7 +47,7 @@ export default function PlayerRow({
     //Health helpers
     const isPC = !!row.playerCharacter;
     const isBloodied = row.maxHP > 0 ? row.currentHP < row.maxHP / 2 : false;
-    const statusText = isBloodied ? "Bloodied" : "Healthy";
+    const statusText = row.currentHP === 0 ? row.playerCharacter ? "Dying" : "Dead" : isBloodied ? "Bloodied" : "Healthy";
 
     //Distances
     const [distances, setDistances] = useState<{ id: string; name: string; ft: number; text: string }[]>([]);

@@ -1,6 +1,6 @@
 {
     "name": "Battle Board",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "manifest_version": 1,
     "author": "Missing Link Dev",
     "description": "A lightweight combat board and initiative tracker for Owlbear Rodeo.",
