@@ -154,7 +154,7 @@ export default function PlayerRow({
             return (
                 <Box sx={{ lineHeight: 1.1 }}>
                     <Typography sx={{ fontSize: "0.75rem", fontWeight: 600 }}>
-                        {row.currentHP}/{row.maxHP}
+                        {row.currentHP === 0 ? row.playerCharacter ? "Dying" : "Dead" : '{row.currentHP}/{row.maxHP}'}
                     </Typography>
                     {row.tempHP > 0 && (
                         <Typography sx={{ fontSize: "0.7rem", color: "text.secondary" }}>
