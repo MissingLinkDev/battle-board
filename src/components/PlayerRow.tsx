@@ -153,8 +153,12 @@ export default function PlayerRow({
             // Numbers: show current/max; temp on second line if present (PC or NPC as configured)
             return (
                 <Box sx={{ lineHeight: 1.1 }}>
-                    <Typography sx={{ fontSize: "0.75rem", fontWeight: 600 }}>
-                        {row.currentHP === 0 ? row.playerCharacter ? "Dying" : "Dead" : '{row.currentHP}/{row.maxHP}'}
+                    <Typography sx={{
+                        fontSize: "0.75rem",
+                        fontWeight: 600,
+                        color: isBloodied ? "error.main" : "success.main",
+                    }}>
+                        {row.currentHP === 0 ? row.playerCharacter ? "Dying" : "Dead" : `${row.currentHP}/${row.maxHP}`}
                     </Typography>
                     {row.tempHP > 0 && (
                         <Typography sx={{ fontSize: "0.7rem", color: "text.secondary" }}>
