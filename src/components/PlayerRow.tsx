@@ -124,7 +124,7 @@ export default function PlayerRow({
 
             const list = await Promise.all(
                 tokens
-                    .filter((t) => t.id !== row.id && t.visible !== false)
+                    .filter((t) => t.id !== row.id)
                     .map(async (t) => {
                         const raw = await obrDistanceBetweenTokensUnits(me, t, tokenMode);
                         return {

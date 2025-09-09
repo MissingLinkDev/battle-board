@@ -26,6 +26,7 @@ export default function PlayerTable({ items, settings, tokens }: PlayerTableProp
     const showHealthCol = healthMasterOn && healthAnyMode;
 
     const colCount = 4 + (showHealthCol ? 1 : 0);
+    const initiativeIds = items.map((item) => item.id);
 
     return (
         <TableContainer
@@ -62,13 +63,12 @@ export default function PlayerTable({ items, settings, tokens }: PlayerTableProp
 
                 <TableBody>
                     {items
-                        .filter((item) => item.visible)
                         .map((item) => (
                             <PlayerRow
                                 key={item.id}
                                 row={item}
                                 settings={settings} // pass all settings down
-                                tokens={tokens.filter((token) => token.visible === item.visible)}
+                                tokens={tokens.filter((token) => initiativeIds.includes(token.id))}
                                 colSpan={colCount}
                                 showHealthColumn={showHealthCol} // optional convenience for layout
                             />

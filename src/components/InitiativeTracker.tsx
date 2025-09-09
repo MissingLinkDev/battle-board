@@ -72,7 +72,11 @@ export function InitiativeTracker() {
     const prevActiveId = useRef<string | null>(null);
     const rafIdRef = useRef<number | null>(null);
 
-    const sortedRows = sortByInitiativeDesc(rows);
+    const sortedRows = useMemo(() => sortByInitiativeDesc(rows), [rows]);
+    const initiativeItemIds = useMemo(
+        () => new Set(sortedRows.map(r => r.id)),
+        [sortedRows]
+    );
     // Column visibility (NEW)
     const showAC = settings.showArmor;
     const showHP = settings.showHP;
@@ -452,13 +456,13 @@ export function InitiativeTracker() {
     return (
         <Box
             ref={rootRef}
-            sx={{ display: "flex", flexDirection: "column", height: "100%", minWidth: 0 }}
+            sx={{ display: "flex", flexDirection: "column", height: "100%", minWidth: 0, minHeight: 200 }}
         >
             <Box
                 sx={{
                     display: view === "tracker" ? "flex" : "none",
                     flex: 1,
-                    minHeight: 0,
+                    minHeight: 200,
                     flexDirection: "column",
                 }}
             >
@@ -474,113 +478,186 @@ export function InitiativeTracker() {
                             flexDirection: "column",
                         }}
                     >
-                        <Table
-                            stickyHeader
-                            size="small"
-                            aria-label="initiative table"
-                            sx={{
-                                tableLayout: "fixed",
-                                width: "100%",
-                                "& td, & th": { py: 0.25, px: 0.25 },
-                                "& thead th": { fontSize: "0.72rem", letterSpacing: 0.4, py: 0.9, height: 28 },
-                            }}
-                        >
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell width={18}></TableCell>
-                                    <TableCell width={40} align="center">INIT</TableCell>
-                                    <TableCell align="center">NAME</TableCell>
-                                    {showAC && <TableCell width={36} align="center">AC</TableCell>}
-                                    {showHP && <TableCell width={62} align="center">HP</TableCell>}
-                                    {showHP && <TableCell width={36} align="center">TP</TableCell>}
-                                    {showDMR && <TableCell width={24}></TableCell>}
-                                </TableRow>
-                            </TableHead>
-
-                            <TableBody>
-                                {sortedRows.map((it) => (
-                                    <InitiativeRow
-                                        key={it.id}
-                                        row={it}
-                                        expanded={expandedIds.has(it.id)}
-                                        onToggleExpand={() => {
-                                            toggleExpanded(it.id);
-                                        }}
-                                        onChange={(draft) => {
-                                            localEditRef.current = true;
-                                            setRows((prev) => prev.map((r) => (r.id === it.id ? { ...r, ...draft } : r)));
-                                        }}
-                                        // onSizeChange={resizeNow}
-                                        onRemove={removeFromInitiative}
-                                        settings={{
-                                            showMovementRange: settings.showMovementRange,
-                                            showAttackRange: settings.showAttackRange,
-                                            showConditions: settings.showConditions,
-                                            showDistances: settings.showDistances,
-                                            showAC,
-                                            showHP,
-                                            showDMR,
-                                        }}
-                                        started={started}
-                                        tokens={cmTokens}
-                                        colSpan={gmColCount}
-                                    />
-                                ))}
-                            </TableBody>
-                        </Table>
-
-                        {sortedRows.length === 0 ? (
-                            // Empty-state fills the table's row area
-                            <Box
+                        <Box>
+                            <Table
+                                stickyHeader
+                                size="small"
+                                aria-label="initiative table"
                                 sx={{
-                                    flex: 1,
-                                    minHeight: 0,
-                                    height: "100%",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    px: 2,
-                                    textAlign: "center",
+                                    tableLayout: "fixed",
+                                    width: "100%",
+                                    "& td, & th": { py: 0.25, px: 0.25 },
+                                    "& thead th": { fontSize: "0.72rem", letterSpacing: 0.4, py: 0.9, height: 28 },
                                 }}
                             >
-                                <Box>
-                                    <Typography variant="body2" sx={{ color: "text.secondary", mb: 1 }}>
-                                        No creatures in initiative yet. Add a character to the Battle Board to get started.
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell width={18}></TableCell>
+                                        <TableCell width={40} align="center">INIT</TableCell>
+                                        <TableCell align="center">NAME</TableCell>
+                                        {showAC && <TableCell width={36} align="center">AC</TableCell>}
+                                        {showHP && <TableCell width={62} align="center">HP</TableCell>}
+                                        {showHP && <TableCell width={36} align="center">TP</TableCell>}
+                                        {showDMR && <TableCell width={24}></TableCell>}
+                                    </TableRow>
+                                </TableHead>
+
+                                <TableBody>
+                                    {sortedRows.map((it) => (
+                                        <InitiativeRow
+                                            key={it.id}
+                                            row={it}
+                                            expanded={expandedIds.has(it.id)}
+                                            onToggleExpand={() => {
+                                                toggleExpanded(it.id);
+                                            }}
+                                            onChange={(draft) => {
+                                                localEditRef.current = true;
+                                                setRows((prev) => prev.map((r) => (r.id === it.id ? { ...r, ...draft } : r)));
+                                            }}
+                                            // onSizeChange={resizeNow}
+                                            onRemove={removeFromInitiative}
+                                            settings={{
+                                                showMovementRange: settings.showMovementRange,
+                                                showAttackRange: settings.showAttackRange,
+                                                showConditions: settings.showConditions,
+                                                showDistances: settings.showDistances,
+                                                showAC,
+                                                showHP,
+                                                showDMR,
+                                            }}
+                                            started={started}
+                                            tokens={cmTokens.filter((token) => initiativeItemIds.has(token.id))}
+                                            colSpan={gmColCount}
+                                        />
+                                    ))}
+                                </TableBody>
+                            </Table>
+
+                            {sortedRows.length === 0 ? (
+                                // Empty-state fills the table's row area
+                                <Box
+                                    sx={{
+                                        flex: 1,
+                                        minHeight: 0,
+                                        height: "100%",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        px: 2,
+                                        textAlign: "center",
+                                    }}
+                                >
+                                    <Box>
+                                        <Typography variant="body2" sx={{ color: "text.secondary", mb: 1 }}>
+                                            No creatures in initiative yet. Add a character to the Battle Board to get started.
+                                        </Typography>
+
+                                        <Stack direction="row" spacing={1} justifyContent="center">
+                                            <Button
+                                                size="small"
+                                                variant="outlined"
+                                                onClick={() => handleAddAll(true)}
+                                                sx={{ borderRadius: 1 }}
+                                            >
+                                                Add All in Scene
+                                            </Button>
+
+                                            <Button
+                                                size="small"
+                                                variant="outlined"
+                                                onClick={() => handleAddAll(false)}
+                                                sx={{ borderRadius: 1 }}
+                                            >
+                                                Add Visible Only
+                                            </Button>
+                                        </Stack>
+                                    </Box>
+                                </Box>
+                            ) : (
+                                // Spacer ensures the footer is pinned to the bottom even with few rows
+                                <Box sx={{ flex: 1, minHeight: 0 }} />
+                            )}
+                        </Box>
+                        <Box sx={{ px: 1, py: 0.75, bgcolor: "background.default" }}>
+                            <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+                                <Stack direction="row" alignItems="center" spacing={1.25}>
+                                    {started ? (
+                                        <Button disabled={sortedRows.length === 0} size="small" variant="contained" color="error" startIcon={<StopRounded />} onClick={handleEnd} sx={{ minWidth: 96 }}>
+                                            End
+                                        </Button>
+                                    ) : (
+                                        <Button disabled={sortedRows.length === 0} size="small" variant="contained" startIcon={<PlayArrowRounded />} onClick={handleStart} sx={{ minWidth: 96 }}>
+                                            Start
+                                        </Button>
+                                    )}
+
+                                    <IconButton
+                                        size="small"
+                                        onClick={handlePrev}
+                                        disabled={!started || sortedRows.length === 0 || (round === 1 && getActiveIndex(sortedRows) === 0)}
+                                    >
+                                        <NavigateBeforeRounded />
+                                    </IconButton>
+
+                                    <Typography variant="body2" sx={{ minWidth: 72, textAlign: "center", fontWeight: 700 }}>
+                                        Round: {round}
                                     </Typography>
 
-                                    <Stack direction="row" spacing={1} justifyContent="center">
-                                        <Button
-                                            size="small"
-                                            variant="outlined"
-                                            onClick={() => handleAddAll(true)}
-                                            sx={{ borderRadius: 1 }}
-                                        >
-                                            Add All in Scene
-                                        </Button>
+                                    <IconButton size="small" onClick={handleNext} disabled={!started || sortedRows.length === 0}>
+                                        <NavigateNextRounded />
+                                    </IconButton>
+                                </Stack>
 
-                                        <Button
+                                <Stack direction="row" alignItems="center" spacing={0.5}>
+                                    <Tooltip title="Settings">
+                                        <IconButton size="small" onClick={() => setView("settings")}>
+                                            <SettingsRounded fontSize="small" />
+                                        </IconButton>
+                                    </Tooltip>
+                                    <Tooltip title="Patreon">
+                                        <IconButton
                                             size="small"
-                                            variant="outlined"
-                                            onClick={() => handleAddAll(false)}
-                                            sx={{ borderRadius: 1 }}
+                                            component="a"
+                                            href="https://www.patreon.com/MissingLinkDev"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
                                         >
-                                            Add Visible Only
-                                        </Button>
-                                    </Stack>
-                                </Box>
-                            </Box>
-                        ) : (
-                            // Spacer ensures the footer is pinned to the bottom even with few rows
-                            <Box sx={{ flex: 1, minHeight: 0 }} />
-                        )}
+                                            <Box
+                                                component="img"
+                                                src="/patreon-icon.png"
+                                                alt="Patreon"
+                                                sx={{ width: 20, height: 20 }}
+                                            />
+                                        </IconButton>
+                                    </Tooltip>
+                                </Stack>
+                            </Stack>
+                        </Box>
                     </TableContainer>
                 ) : (
                     settings.disablePlayerList ? (
-                        <Box sx={{ p: 2, textAlign: "center", color: "text.secondary" }}>
+                        <Box sx={{
+                            flex: 1,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            p: 2,
+                            textAlign: "center",
+                            color: "text.secondary"
+                        }}>
                             <Typography variant="body2">The DM has disabled the player initiative list.</Typography>
                         </Box>
                     ) : !started ? (
-                        <Box sx={{ p: 2, textAlign: "center", color: "text.secondary" }}>
+                        <Box sx={{
+                            flex: 1,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            p: 2,
+                            textAlign: "center",
+                            color: "text.secondary"
+                        }}>
                             <Typography variant="body2">Initiative has not started yet.</Typography>
                         </Box>
                     ) :
@@ -591,64 +668,6 @@ export function InitiativeTracker() {
                                 tokens={cmTokens}
                             />
                         )
-                )}
-
-                {role === "GM" && (
-                    <Box sx={{ px: 1, py: 0.75, bgcolor: "background.default" }}>
-                        <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
-                            <Stack direction="row" alignItems="center" spacing={1.25}>
-                                {started ? (
-                                    <Button disabled={sortedRows.length === 0} size="small" variant="contained" color="error" startIcon={<StopRounded />} onClick={handleEnd} sx={{ minWidth: 96 }}>
-                                        End
-                                    </Button>
-                                ) : (
-                                    <Button disabled={sortedRows.length === 0} size="small" variant="contained" startIcon={<PlayArrowRounded />} onClick={handleStart} sx={{ minWidth: 96 }}>
-                                        Start
-                                    </Button>
-                                )}
-
-                                <IconButton
-                                    size="small"
-                                    onClick={handlePrev}
-                                    disabled={!started || sortedRows.length === 0 || (round === 1 && getActiveIndex(sortedRows) === 0)}
-                                >
-                                    <NavigateBeforeRounded />
-                                </IconButton>
-
-                                <Typography variant="body2" sx={{ minWidth: 72, textAlign: "center", fontWeight: 700 }}>
-                                    Round: {round}
-                                </Typography>
-
-                                <IconButton size="small" onClick={handleNext} disabled={!started || sortedRows.length === 0}>
-                                    <NavigateNextRounded />
-                                </IconButton>
-                            </Stack>
-
-                            <Stack direction="row" alignItems="center" spacing={0.5}>
-                                <Tooltip title="Settings">
-                                    <IconButton size="small" onClick={() => setView("settings")}>
-                                        <SettingsRounded fontSize="small" />
-                                    </IconButton>
-                                </Tooltip>
-                                <Tooltip title="Patreon">
-                                    <IconButton
-                                        size="small"
-                                        component="a"
-                                        href="https://www.patreon.com/MissingLinkDev"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                    >
-                                        <Box
-                                            component="img"
-                                            src="/patreon-icon.png"
-                                            alt="Patreon"
-                                            sx={{ width: 20, height: 20 }}
-                                        />
-                                    </IconButton>
-                                </Tooltip>
-                            </Stack>
-                        </Stack>
-                    </Box>
                 )}
             </Box>
             {/* Settings view (also mounted only when needed, but doesn't force unmount of tracker) */}

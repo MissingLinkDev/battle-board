@@ -252,7 +252,7 @@ export default function InitiativeRow({
 
             const list = await Promise.all(
                 tokens
-                    .filter((t) => t.id !== row.id && t.visible !== false)
+                    .filter((t) => t.id !== row.id)
                     .map(async (t) => {
                         const raw = await obrDistanceBetweenTokensUnits(me, t, tokenMode);
                         // console.log("distance between", me.name, "and", t.name, "is", raw);
