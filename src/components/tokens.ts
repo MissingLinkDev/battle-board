@@ -106,15 +106,100 @@ export async function getCMTokens(): Promise<CMToken[]> {
 /**
  * Subscribe to changes in CHARACTER/MOUNT items and grid scale.
  * Calls `cb` with an up-to-date CMToken array whenever items or scale change.
+ * Optimized to only trigger on position, visibility, scale, or rotation changes.
  */
 export function onCMTokensChange(cb: (tokens: CMToken[]) => void) {
     let unsubItems: (() => void) | null = null;
     let unsubGrid: (() => void) | null = null;
     let live = true;
 
+    // Cache for tracking relevant changes
+    const tokenCacheRef = {
+        current: new Map<string, {
+            x: number;
+            y: number;
+            visible: boolean;
+            scaleX: number;
+            scaleY: number;
+            rotation: number;
+            widthFeet: number;
+            heightFeet: number;
+        }>()
+    };
+
     const emitFrom = (items: Item[], perCellUnits: number) => {
         if (!live) return;
-        cb(itemsToCMTokensWithUnits(items, perCellUnits));
+
+        const tokens = itemsToCMTokensWithUnits(items, perCellUnits);
+
+        // Update cache for next comparison
+        const newCache = new Map();
+        for (const token of tokens) {
+            newCache.set(token.id, {
+                x: token.position.x,
+                y: token.position.y,
+                visible: token.visible ?? true,
+                scaleX: token.scaleX,
+                scaleY: token.scaleY,
+                rotation: token.rotation,
+                widthFeet: token.widthFeet,
+                heightFeet: token.heightFeet,
+            });
+        }
+        tokenCacheRef.current = newCache;
+
+        cb(tokens);
+    };
+
+    const shouldProcessChange = (items: Item[], perCellUnits: number): boolean => {
+        const relevantItems = items.filter(item => {
+            if (!isImage(item)) return false;
+            return item.layer === "CHARACTER" || item.layer === "MOUNT";
+        });
+
+        // Quick check - if count changed, definitely process
+        if (relevantItems.length !== tokenCacheRef.current.size) {
+            return true;
+        }
+
+        // Check individual items for relevant changes
+        for (const item of relevantItems) {
+            const cached = tokenCacheRef.current.get(item.id);
+            if (!cached) {
+                return true; // New item
+            }
+
+            // Check position
+            if (cached.x !== (item.position?.x ?? 0) ||
+                cached.y !== (item.position?.y ?? 0)) {
+                return true;
+            }
+
+            // Check visibility
+            if (cached.visible !== (item.visible ?? true)) {
+                return true;
+            }
+
+            // Check scale
+            const scaleX = Math.abs(item.scale?.x ?? 1);
+            const scaleY = Math.abs(item.scale?.y ?? 1);
+            if (cached.scaleX !== scaleX || cached.scaleY !== scaleY) {
+                return true;
+            }
+
+            // Check rotation
+            if (cached.rotation !== (item.rotation ?? 0)) {
+                return true;
+            }
+
+            // Check size (which depends on scale and grid)
+            const { widthFeet, heightFeet } = computeTokenSizeFeetFromSnapshot(item, perCellUnits);
+            if (cached.widthFeet !== widthFeet || cached.heightFeet !== heightFeet) {
+                return true;
+            }
+        }
+
+        return false;
     };
 
     // bootstrap once
@@ -125,17 +210,21 @@ export function onCMTokensChange(cb: (tokens: CMToken[]) => void) {
 
         emitFrom(initial, perCell);
 
-        // items listener (re-map using cached per-cell units)
+        // items listener with optimization
         unsubItems = OBR.scene.items.onChange((items) => {
-            emitFrom(items as Item[], _perCellUnits ?? 5);
+            const currentPerCell = _perCellUnits ?? 5;
+            if (shouldProcessChange(items as Item[], currentPerCell)) {
+                emitFrom(items as Item[], currentPerCell);
+            }
         });
 
         // grid scale listener (if available) to refresh units + re-emit
-        // @ts-ignore – adjust if a more specific event exists in your SDK version.
+        // @ts-ignore — adjust if a more specific event exists in your SDK version.
         unsubGrid = OBR.scene.grid.onChange?.(async () => {
             _perCellUnits = null; // invalidate cache
             const freshUnits = await getPerCellUnits();
             const current = await OBR.scene.items.getItems();
+            // Grid changes always trigger a full update since measurements change
             emitFrom(current, freshUnits);
         }) ?? null;
     })().catch(console.error);

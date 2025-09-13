@@ -24,6 +24,13 @@ export type InitiativeItem = {
     movementOpacity?: number | null;
     rangeOpacity?: number | null;
     dmPreview?: boolean;
+    inInitiative?: boolean;
+
+    // NEW: Single group ID instead of array
+    groupId?: string | null;
+
+    // DEPRECATED: Keep for migration
+    encounterGroups?: string[];
 };
 
 /** Convert Item+Meta → InitiativeItem (prefers live label/name from Item). */
@@ -35,6 +42,16 @@ export function initiativeFromItem(item: Item): InitiativeItem | null {
     const img = item as any; // Image extends Item
     const liveLabel: string | undefined = img?.text?.plainText;
     const liveName: string | undefined = img?.name;
+
+    // Handle migration from encounterGroups to groupId
+    let groupId = meta.groupId;
+    let encounterGroups = meta.encounterGroups;
+
+    // Migration: if no groupId but has encounterGroups, use first group
+    if (!groupId && encounterGroups && encounterGroups.length > 0) {
+        groupId = encounterGroups[0];
+        // Keep encounterGroups for now to avoid data loss during transition
+    }
 
     return {
         id: item.id,
@@ -60,6 +77,13 @@ export function initiativeFromItem(item: Item): InitiativeItem | null {
         movementOpacity: meta.movementOpacity ?? null,
         rangeOpacity: meta.rangeOpacity ?? null,
         dmPreview: meta.dmPreview ?? false,
+        inInitiative: meta.inInitiative ?? false,
+
+        // Use migrated groupId or original
+        groupId: groupId ?? null,
+
+        // Keep legacy data during transition
+        encounterGroups: encounterGroups ?? [],
     };
 }
 
@@ -92,6 +116,13 @@ export function metaPatchFromRowDiff(before: InitiativeItem, after: InitiativeIt
     assign("movementOpacity");
     assign("rangeOpacity");
     assign("dmPreview");
+    assign("inInitiative");
+
+    // Handle groupId change
+    assign("groupId");
+
+    // Legacy: still handle encounterGroups for backward compatibility
+    assign("encounterGroups");
 
     return patch;
 }

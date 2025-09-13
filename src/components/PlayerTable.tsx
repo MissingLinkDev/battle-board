@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import Paper from "@mui/material/Paper";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -12,21 +13,30 @@ import type { InitiativeSettings } from "./SceneState";
 
 type PlayerTableProps = {
     items: InitiativeItem[];
-    settings: InitiativeSettings;   // pass the whole settings object
+    settings: InitiativeSettings;
     tokens: CMToken[];
+    showHealthColumn?: boolean; // Optional override
 };
 
-export default function PlayerTable({ items, settings, tokens }: PlayerTableProps) {
-    const healthMasterOn = !!settings.displayHealthStatusToPlayer;
-    // Show column if master is on and at least one mode isn't "none"
-    const healthAnyMode =
-        (settings.pcHealthMode ?? "numbers") !== "none" ||
-        (settings.npcHealthMode ?? "status") !== "none";
+export default function PlayerTable({
+    items,
+    settings,
+    tokens,
+    showHealthColumn
+}: PlayerTableProps) {
+    const colCount = 4 + (showHealthColumn ? 1 : 0);
 
-    const showHealthCol = healthMasterOn && healthAnyMode;
+    // Memoize the initiative token IDs to avoid unnecessary recalculations
+    const initiativeTokenIds = useMemo(() =>
+        new Set(items.map(item => item.id)),
+        [items]
+    );
 
-    const colCount = 4 + (showHealthCol ? 1 : 0);
-    const initiativeIds = items.map((item) => item.id);
+    // Filter tokens to only include those in initiative
+    const filteredTokens = useMemo(() =>
+        tokens.filter(token => initiativeTokenIds.has(token.id)),
+        [tokens, initiativeTokenIds]
+    );
 
     return (
         <TableContainer
@@ -57,22 +67,27 @@ export default function PlayerTable({ items, settings, tokens }: PlayerTableProp
                         <TableCell width={40} align="center">INIT</TableCell>
                         <TableCell width={60} align="center"></TableCell>
                         <TableCell align="center">NAME</TableCell>
-                        {showHealthCol && <TableCell width={62} align="center">HEALTH</TableCell>}
+                        {showHealthColumn && <TableCell width={62} align="center">HEALTH</TableCell>}
                     </TableRow>
                 </TableHead>
 
                 <TableBody>
-                    {items
-                        .map((item) => (
+                    {items.map((item) => {
+                        // Get the current token data for this item
+                        const tokenData = tokens.find(token => token.id === item.id);
+
+                        return (
                             <PlayerRow
                                 key={item.id}
                                 row={item}
-                                settings={settings} // pass all settings down
-                                tokens={tokens.filter((token) => initiativeIds.includes(token.id))}
+                                tokenUrl={tokenData?.id ? undefined : undefined} // Let PlayerRow handle token URL fetching
+                                settings={settings}
+                                tokens={filteredTokens}
                                 colSpan={colCount}
-                                showHealthColumn={showHealthCol} // optional convenience for layout
+                                showHealthColumn={showHealthColumn}
                             />
-                        ))}
+                        );
+                    })}
                 </TableBody>
             </Table>
         </TableContainer>

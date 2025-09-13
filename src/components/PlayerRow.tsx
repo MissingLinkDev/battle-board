@@ -9,21 +9,20 @@ import Avatar from "@mui/material/Avatar";
 import KeyboardArrowDown from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUp from "@mui/icons-material/KeyboardArrowUp";
 import { alpha } from "@mui/material/styles";
-import type { InitiativeItem } from "./InitiativeItem";
 import OBR, { isImage, type Item } from "@owlbear-rodeo/sdk";
-import Stack from "@mui/material/Stack";
-import Tooltip from "@mui/material/Tooltip";
-import InfoRounded from "@mui/icons-material/InfoRounded";
-import List from "@mui/material/List";
-import ListItem from "@mui/material/ListItem";
-import { formatDistanceLabel, formatFeet, getCachedGridUnits, obrDistanceBetweenTokensUnits, type TokenDistanceMode } from "./utils";
+
+import type { InitiativeItem } from "./InitiativeItem";
+import { HealthDisplay } from "./HealthDisplay";
+import { DistancePanel } from "./DistancePanel";
+import { useDistances } from "../hooks/useDistances";
+import { useHealthLogic } from "../hooks/useHealthLogic";
 import type { CMToken } from "./tokens";
 import type { InitiativeSettings } from "./SceneState";
 
 type Props = {
     row: InitiativeItem;
     tokenUrl?: string;
-    settings: InitiativeSettings;       // NEW: pass full settings
+    settings: InitiativeSettings;
     tokens: CMToken[];
     colSpan?: number;
     showHealthColumn?: boolean;
@@ -37,60 +36,52 @@ export default function PlayerRow({
     colSpan,
     showHealthColumn,
 }: Props) {
-    const [open, setOpen] = useState(row.active);
-    const isActive = row.active;
+    const [open, setOpen] = useState(false);
+    const [avatarUrl, setAvatarUrl] = useState<string | undefined>(tokenUrl);
     const prevActiveRef = useRef(row.active);
 
-    // Token Image
-    const [avatarUrl, setAvatarUrl] = useState<string | undefined>(tokenUrl);
+    // Centralized hooks
+    const { getHealthInfo } = useHealthLogic(settings);
+    const distances = useDistances(row.id, tokens, settings.showDistances);
+    const healthInfo = getHealthInfo(row);
 
-    //Health helpers
-    const isPC = !!row.playerCharacter;
-    const isBloodied = row.maxHP > 0 ? row.currentHP < row.maxHP / 2 : false;
-    const statusText = row.currentHP === 0 ? row.playerCharacter ? "Dying" : "Dead" : isBloodied ? "Bloodied" : "Healthy";
-
-    //Distances
-    const [distances, setDistances] = useState<{ id: string; name: string; ft: number; text: string }[]>([]);
-    const { unitLabel, unitsPerCell } = getCachedGridUnits();
-
-    // --------- derive health visibility for THIS row ----------
-    const healthMasterOn = !!settings.displayHealthStatusToPlayer;
-    const pcMode = (settings.pcHealthMode ?? "numbers") as "none" | "status" | "numbers";
-    const npcMode = (settings.npcHealthMode ?? "status") as "none" | "status" | "numbers";
-    const rowMode = isPC ? pcMode : npcMode;
-
-    // If parent didn't pass showHealthColumn, derive defensively (matches PlayerTable logic)
-    const computedShowHealthColumn =
-        showHealthColumn ??
-        (healthMasterOn && (pcMode !== "none" || npcMode !== "none"));
-
+    // Auto-expand/collapse logic for player characters
     useEffect(() => {
-        // when row becomes active (false -> true), open the panel
-        if (!prevActiveRef.current && row.active) {
+        const wasActive = prevActiveRef.current;
+        const isActive = row.active;
+
+        // Auto-expand when becoming active (only for player characters)
+        if (!wasActive && isActive && row.playerCharacter) {
             setOpen(true);
         }
-        if (prevActiveRef.current && !row.active) {
+
+        // Auto-collapse when becoming inactive
+        if (wasActive && !isActive) {
             setOpen(false);
         }
-        prevActiveRef.current = row.active;
-    }, [row.active]);
 
+        prevActiveRef.current = isActive;
+    }, [row.active, row.playerCharacter, row.name, row.id]);
+
+    // Token image management
     useEffect(() => {
         let cancelled = false;
 
-        async function bootstrap() {
-            const items = await OBR.scene.items.getItems();
-            if (cancelled) return;
-            const me = items.find((it) => it.id === row.id);
-            if (me && isImage(me)) {
-                setAvatarUrl(me.image?.url ?? undefined);
+        const updateAvatar = async () => {
+            try {
+                const items = await OBR.scene.items.getItems();
+                if (cancelled) return;
+                const me = items.find((it) => it.id === row.id);
+                if (me && isImage(me)) {
+                    setAvatarUrl(me.image?.url ?? undefined);
+                }
+            } catch (error) {
+                // Silently handle errors - avatar is not critical
+                console.warn("Failed to update avatar:", error);
             }
-        }
+        };
 
-        // initial load
-        bootstrap();
-
-        // subscribe to changes
+        updateAvatar();
         const unsub = OBR.scene.items.onChange((items: Item[]) => {
             if (cancelled) return;
             const me = items.find((it) => it.id === row.id);
@@ -105,82 +96,11 @@ export default function PlayerRow({
         };
     }, [row.id]);
 
-    // ------------ Distances list ------------
-    useEffect(() => {
-        let cancelled = false;
+    const isActive = row.active;
+    const computedShowHealthColumn = showHealthColumn ?? healthInfo.showColumn;
 
-        (async () => {
-            if (!settings.showDistances) {
-                setDistances([]);
-                return;
-            }
-
-            const me = tokens.find((t) => t.id === row.id);
-            if (!me) {
-                setDistances([]);
-                return;
-            }
-            const tokenMode: TokenDistanceMode = "box";
-
-            const list = await Promise.all(
-                tokens
-                    .filter((t) => t.id !== row.id)
-                    .map(async (t) => {
-                        const raw = await obrDistanceBetweenTokensUnits(me, t, tokenMode);
-                        return {
-                            id: t.id,
-                            name: t.name || "(unnamed)",
-                            ft: formatFeet(raw),
-                            text: formatDistanceLabel(raw, unitLabel, unitsPerCell),
-                        };
-                    })
-            );
-
-            if (!cancelled) {
-                setDistances(list.sort((a, b) => a.ft - b.ft));
-            }
-        })();
-
-        return () => {
-            cancelled = true;
-        };
-    }, [tokens, row.id, settings.showDistances]);
-
-    const renderHealthCell = () => {
-        if (!healthMasterOn || rowMode === "none") return null;
-
-        if (rowMode === "numbers") {
-            // Numbers: show current/max; temp on second line if present (PC or NPC as configured)
-            return (
-                <Box sx={{ lineHeight: 1.1 }}>
-                    <Typography sx={{
-                        fontSize: "0.75rem",
-                        fontWeight: 600,
-                        color: isBloodied ? "error.main" : "success.main",
-                    }}>
-                        {row.currentHP === 0 ? row.playerCharacter ? "Dying" : "Dead" : `${row.currentHP}/${row.maxHP}`}
-                    </Typography>
-                    {row.tempHP > 0 && (
-                        <Typography sx={{ fontSize: "0.7rem", color: "text.secondary" }}>
-                            temp: {row.tempHP}
-                        </Typography>
-                    )}
-                </Box>
-            );
-        }
-
-        // Status
-        return (
-            <Typography
-                sx={{
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
-                    color: isBloodied ? "error.main" : "success.main",
-                }}
-            >
-                {statusText}
-            </Typography>
-        );
+    const handleToggleOpen = () => {
+        setOpen(!open);
     };
 
     return (
@@ -188,7 +108,7 @@ export default function PlayerRow({
             <TableRow
                 hover
                 selected={isActive}
-                onClick={() => setOpen(!open)}
+                onClick={settings.showDistances ? handleToggleOpen : undefined}
                 sx={{
                     height: "45px",
                     "& td": { py: isActive ? 0.6 : 0.4, px: 0.5 },
@@ -196,6 +116,7 @@ export default function PlayerRow({
                     backgroundColor: isActive ? (t) => alpha(t.palette.success.main, 0.12) : "inherit",
                     outline: isActive ? (t) => `1px solid ${alpha(t.palette.success.main, 0.35)}` : "none",
                     transform: isActive ? "scale(1.01)" : "scale(1)",
+                    cursor: settings.showDistances ? "pointer" : "default",
                 }}
             >
                 {/* Expand / Collapse */}
@@ -204,7 +125,10 @@ export default function PlayerRow({
                         <IconButton
                             aria-label="expand row"
                             size="small"
-                            onClick={() => setOpen(!open)}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleOpen();
+                            }}
                             sx={{ p: 0.25 }}
                         >
                             {open ? (
@@ -234,7 +158,7 @@ export default function PlayerRow({
                     </Box>
                 </TableCell>
 
-                {/* Avatar (new 3rd column) */}
+                {/* Avatar */}
                 <TableCell align="center">
                     <Avatar
                         src={avatarUrl}
@@ -259,72 +183,21 @@ export default function PlayerRow({
                     </Typography>
                 </TableCell>
 
-                {/* Health (only render cell if table allocated the column) */}
+                {/* Health */}
                 {computedShowHealthColumn && (
                     <TableCell width={62} align="center">
-                        {renderHealthCell()}
+                        <HealthDisplay row={row} healthInfo={healthInfo} variant="compact" />
                     </TableCell>
                 )}
             </TableRow>
 
+            {/* Expanded distances panel */}
             {settings.showDistances && (
                 <TableRow>
                     <TableCell colSpan={colSpan} sx={{ p: 0, borderBottom: 0 }}>
                         <Collapse in={open} timeout="auto" unmountOnExit>
                             <Box sx={{ flex: 1, minWidth: 0, px: 4, py: 1 }}>
-                                <Stack direction="row" alignItems="center" justifyContent="center" sx={{ px: 1, py: 0.5 }}>
-                                    <Stack direction="row" alignItems="center" spacing={0.5}>
-                                        <Typography sx={{ fontWeight: 700, fontSize: "0.95rem", textAlign: "center", mb: 0.75 }}>
-                                            Distances
-                                        </Typography>
-                                        <Tooltip
-                                            title="Measured from edge to edge; attack range must be greater than distance."
-                                            enterDelay={300}
-                                        >
-                                            <InfoRounded fontSize="small" sx={{ color: "text.secondary", cursor: "help" }} />
-                                        </Tooltip>
-                                    </Stack>
-                                </Stack>
-                                <List dense disablePadding sx={{ px: 0, "& .MuiListItem-root": { py: 0.25 } }}>
-                                    {distances.length === 0 ? (
-                                        <ListItem disableGutters>
-                                            <Typography sx={{ fontSize: "0.8rem", color: "text.secondary" }}>
-                                                No other tokens found.
-                                            </Typography>
-                                        </ListItem>
-                                    ) : (
-                                        distances.map((d) => (
-                                            <ListItem
-                                                key={d.id}
-                                                disableGutters
-                                                sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
-                                            >
-                                                <Typography
-                                                    sx={{
-                                                        flex: 1,
-                                                        minWidth: 0,
-                                                        overflow: "hidden",
-                                                        textOverflow: "ellipsis",
-                                                        whiteSpace: "nowrap",
-                                                        fontSize: "0.8rem",
-                                                    }}
-                                                >
-                                                    {d.name}
-                                                </Typography>
-                                                <Typography
-                                                    sx={{
-                                                        flex: "0 0 35px",
-                                                        textAlign: "right",
-                                                        fontSize: "0.8rem",
-                                                        color: "text.secondary",
-                                                    }}
-                                                >
-                                                    {d.text}
-                                                </Typography>
-                                            </ListItem>
-                                        ))
-                                    )}
-                                </List>
+                                <DistancePanel distances={distances} />
                             </Box>
                         </Collapse>
                     </TableCell>

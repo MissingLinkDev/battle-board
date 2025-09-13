@@ -31,6 +31,7 @@ type Props = {
     onChange: (next: InitiativeSettings) => void;
     onBack: () => void;
     rows?: InitiativeItem[];
+    ready?: boolean;
 };
 
 type MetaForRings = {
@@ -204,7 +205,7 @@ function ConfirmProgress({ value, size = 18 }: { value: number; size?: number })
 /* Component                                                           */
 /* ------------------------------------------------------------------ */
 
-export default function SettingsView({ value, onChange, onBack, rows }: Props) {
+export default function SettingsView({ value, onChange, onBack, rows, ready = true }: Props) {
     const rootRef = useRef<HTMLDivElement | null>(null);
     const hasInitiative = (rows?.length ?? 0) > 0;
 
@@ -287,6 +288,7 @@ export default function SettingsView({ value, onChange, onBack, rows }: Props) {
 
         const refreshRingsFromSettings = async () => {
             try {
+                if (!ready) return;
                 if (!value.showRangeRings || (!value.showMovementRange && !value.showAttackRange)) {
                     await clearRings("normal");
                     return;
@@ -581,7 +583,27 @@ export default function SettingsView({ value, onChange, onBack, rows }: Props) {
                             />
                         </Box>
 
-
+                        {/* Group Staging Controls Visibility */}
+                        <Box
+                            sx={{
+                                borderRadius: 1,
+                                overflow: "hidden",
+                                border: (t) => `1px solid ${t.palette.divider}`,
+                                mb: 1,
+                            }}
+                        >
+                            <RowShell
+                                title="Staging Controls Visibility"
+                                description="Hide/show tokens when groups are staged/unstaged."
+                                right={
+                                    <Toggle
+                                        checked={!!value.groupStagingControlsVisibility}
+                                        onChange={(next) => set({ groupStagingControlsVisibility: next })}
+                                        aria-label="toggle-group-staging-visibility"
+                                    />
+                                }
+                            />
+                        </Box>
                     </Box>
                 </Stack>
             </Box>
