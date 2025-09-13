@@ -3,7 +3,7 @@
     "version": "2.0.1",
     "manifest_version": 1,
     "author": "Missing Link Dev",
-    "description": "Battle Board transforms your Owlbear Rodeo sessions with initiative tracking and combat management. From quick skirmishes to complex multi-group encounters, Battle Board scales to meet your needs while maintaining the simplicity that makes Owlbear Rodeo great.",
+    "description": "Initiative tracker with range overlays, distance calculations, health management, and advanced group controls.",
     "action": {
         "title": "Battle Board",
         "icon": "/icon.svg",
