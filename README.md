@@ -1,191 +1,360 @@
-# Battle Board – How to Use
+# Battle Board - Initiative Tracker & Combat Manager
 
-Battle Board is an initiative tracker and combat manager for [Owlbear Rodeo](https://www.owlbear.rodeo).  
-It integrates with your scene tokens to manage **initiative, stats, overlays, distances, and round order**—all from the sidebar.
+Battle Board is a powerful initiative tracker and combat management system for [Owlbear Rodeo](https://www.owlbear.rodeo). It transforms your tokens into a comprehensive combat interface with automatic range overlays, real-time distance calculations, health tracking, and advanced group management—all seamlessly integrated with your scene.
 
----
-
-## Quick Start
-
-1. **Right-click any token** → select **Add to Battle Board**.  
-2. Open the **Battle Board sidebar**.  
-3. Hit **Start** to begin combat and track turns.  
-
-You now have a live initiative list, complete with stats, overlays, and round management.
+## Key Features
+- **Smart Initiative System** with decimal tie-breaking
+- **Automatic Range Overlays** for movement and attack ranges
+- **Real-time Distance Calculations** between all tokens
+- **Advanced Group Management** with staging capabilities
+- **Comprehensive Health Tracking** with customizable player visibility
+- **Role-based Interface** (separate GM and Player views)
+- **Math Input Support** for quick HP adjustments
 
 ---
 
-## Adding & Removing Creatures
+## Quick Start Guide
 
-- **Right-Click Context Menu**  
-  - *Add to Battle Board* → adds selected tokens with default stats.
+### Getting Started
+1. **Add tokens to your scene** on the CHARACTER or MOUNT layer
+2. **Right-click any token** → select **"Add to Battle Board"**
+3. **Open the Battle Board sidebar** from your extensions
+4. **Click "Start"** to begin initiative and start tracking turns
 
-  ![Add to BattleBoard](https://battle-board.onrender.com/screenshots/add.png)  
-  - *Remove from Battle Board* → removes selected tokens.
+That's it! You now have a fully functional initiative tracker with automatic range overlays and distance calculations.
 
-  ![Remove from BattleBoard](https://battle-board.onrender.com/screenshots/remove.png)  
-  
-
-- **Add All in Scene** → Adds every CHARACTER/MOUNT token.  
-- **Add Visible Only** → Adds only tokens currently visible to the GM. 
-
-![Add All Buttons](https://battle-board.onrender.com/screenshots/addAllButtons.png) 
-- **Remove Individually** → Right-click a row → **Remove**.  
-
-![Remove Context Menu](https://battle-board.onrender.com/screenshots/removeContext.png)
+### First Combat Setup
+- Use **"Add All in Scene"** to quickly add multiple tokens
+- Players and GM roll initiative normally - edit values by clicking on them
+- Expand any row (click the chevron or name) to access advanced controls
+- Hit **"Start"** when ready to begin combat
 
 ---
 
-## Editing Creature Stats
+## Core Features
 
-Each row is fully editable:
+### Initiative Management
 
-- **Initiative** – click to edit. Supports decimals (see below). 
-- **Name** - Character name. 
-- **Armor Class (AC)** – inline editable.  
-- **HP** – edit *Current* / *Max* separately, with **math input** (`-3`, `+5`).  
-  - Adjusting Max HP auto-adjusts Current HP (clamped if needed).  
-- **Temp HP** – tracked separately.  
-- **DM Ring Preview** – toggles hidden range rings for DM only.  
+#### Adding Tokens
+**Context Menu Method:**
+- Right-click any CHARACTER or MOUNT token
+- Select **"Add to Battle Board"** (for tokens not yet added)
+- Select **"Remove from Battle Board"** (for tokens already added)
 
-![Standard Row](https://battle-board.onrender.com/screenshots/initiativeRow.png)
+<img src="https://battle-board.onrender.com/screenshots/context-menu-add.png" alt="Context Menu" style="max-width: 100%; height: auto;">
+
+**Bulk Add Methods:**
+- **"Add All in Scene"** - Adds every CHARACTER/MOUNT token
+- **"Add Visible Only"** - Adds only tokens currently visible to players
+
+<img src="https://battle-board.onrender.com/screenshots/bulk-add-buttons.png" alt="Bulk Add Buttons" style="max-width: 100%; height: auto;">
+
+#### Smart Initiative System
+After players and GMs roll initiative, Battle Board uses a sophisticated ordering system:
+
+1. **Whole numbers first** - Higher integers go before lower ones
+2. **Decimals break ties** - Lower decimals act first within the same integer
+3. **Alphabetical fallback** - Name-based sorting for exact ties
+
+**Example order:** `15` → `14` → `13.1` → `13.5` → `13.9` → `12`
+
+<img src="https://battle-board.onrender.com/screenshots/initiative-order.png" alt="Initiative Order" style="max-width: 100%; height: auto;">
+
+**Using Decimals to Break Ties:**
+When multiple creatures roll the same initiative, use decimals to establish order:
+- Multiple creatures rolled `13`: Assign `13.1`, `13.2`, `13.3` based on tie-breaker rules
+- Need to insert someone mid-combat? Use `13.5` to place between existing `13.2` and `14`
+- Boss with minions all on `15`: Boss = `15`, Minions = `15.1`, `15.2`, `15.3`
+
+#### Turn Management
+- **Start/End Combat** - Activates the initiative system and begins tracking
+- **Next/Previous Turn** - Cycles through initiative order
+- **Round Counter** - Automatically increments when reaching the end of initiative
+- **Active Highlighting** - Current turn is clearly marked with visual indicators
+
+<img src="https://battle-board.onrender.com/screenshots/turn-controls.png" alt="Turn Controls" style="max-width: 100%; height: auto;">
+
+### Token Stats & Health Management
+
+#### Editable Stats
+Every token row provides quick access to combat-relevant statistics:
+
+- **Initiative** - Click to edit, supports decimals for tie-breaking
+- **Armor Class (AC)** - Inline editing
+- **Hit Points** - Separate Current/Max HP with temp HP tracking
+- **Name** - Automatically syncs with token labels
+
+<img src="https://battle-board.onrender.com/screenshots/stat-editing.png" alt="Stat Editing" style="max-width: 100%; height: auto;">
+
+#### Math Input System
+HP fields support mathematical expressions for quick combat adjustments:
+
+- **Damage:** Type `-8` to subtract 8 HP
+- **Healing:** Type `+5` to add 5 HP  
+- **Complex:** Type `25-3+2-1` for multi-step calculations
+- **Absolute:** Type `15` to set HP to exactly 15
+
+#### Health Status Display
+Battle Board automatically calculates and displays health status:
+
+- **Healthy** - Above 50% HP (green)
+- **Bloodied** - Below 50% HP (yellow)  
+- **Dying** - 0 HP Player Characters (red)
+- **Dead** - 0 HP NPCs (red)
+
+Health visibility to players is fully configurable in settings.
+
+### Range Overlay System
+
+#### Automatic Range Rings
+Battle Board can automatically draw range indicators around tokens:
+
+**Movement Rings (Green, Dashed):**
+- Unattached circles showing movement range
+- Stay in place when tokens move (tactical positioning)
+
+**Attack Range Rings (Red, Dashed):**
+- Attached rounded rectangles following token shape
+- Move with the token for dynamic range visualization
+
+<img src="https://battle-board.onrender.com/screenshots/range-overlays.png" alt="Range Overlays" style="max-width: 100%; height: auto;">
+
+#### DM Preview Mode
+Each token has a radar icon for DM-only ring previews:
+- Toggle individual token rings on/off
+- Visible only to the GM
+- Perfect for planning encounters
+
+<img src="https://battle-board.onrender.com/screenshots/dm-preview.png" alt="DM Preview" style="max-width: 100%; height: auto;">
+
+#### Complete Customization
+Expand any token row to access full styling controls:
+
+**Colors:** 16-color palette picker
+**Line Weight:** 8 thickness options (2-28px)  
+**Patterns:** Solid or dashed lines
+**Opacity:** 0-100% transparency control
+
+<img src="https://battle-board.onrender.com/screenshots/ring-customization.png" alt="Ring Customization" style="max-width: 100%; height: auto;">
+
+### Distance Calculations
+
+#### Automatic Distance Panel
+When you expand a token row, Battle Board calculates distances to all other tokens:
+
+- **Edge-to-edge measurement** (not center-to-center)
+- **Sorted by proximity** (closest first)
+- **"Touch" indicator** for adjacent tokens (< 5ft)
+- **Real-time updates** as tokens move
+
+<img src="https://battle-board.onrender.com/screenshots/distance-panel.png" alt="Distance Panel" style="max-width: 100%; height: auto;">
+
+#### Smart Measurements
+- Distances account for token size (not just position)
+- Uses Owlbear Rodeo's grid measurement system
+- Supports all measurement modes (Chebyshev, Euclidean, etc.)
+- Helpful tooltip: *"Measured edge-to-edge; attack range must be greater than distance"*
+
+### Group Management
+
+Groups serve two primary functions in Battle Board:
+
+#### 1. Minion Management
+Group monsters that act on the same initiative to streamline combat:
+- **All group members activate together** - One "Next Turn" click activates the entire group
+- **Shared initiative** - Edit once, applies to all members
+- **Reduced clicking** - Manage 8 goblins as one group instead of 8 individual turns
+
+#### 2. Multi-Encounter Planning
+Use groups with staging to pre-plan multiple encounters on a single map:
+- **Stage encounters in advance** - Place tokens for later encounters and mark groups as "Staged"
+- **Quick encounter transitions** - Activate staged groups when players move to new areas
+- **Reinforcement management** - Stage reinforcement groups to activate mid-combat
+
+<img src="https://battle-board.onrender.com/screenshots/group-overview.png" alt="Group Management Overview" style="max-width: 100%; height: auto;">
+
+#### Creating and Managing Groups
+
+**Creating Groups:**
+1. **Right-click any token row** → **"Add to Group"**
+2. **Select existing group** or **"Create New Group"**
+3. **All group members share initiative** and act together
+
+<img src="https://battle-board.onrender.com/screenshots/group-creation.png" alt="Group Creation" style="max-width: 100%; height: auto;">
+
+**Group Controls:**
+Groups appear as expandable sections in the initiative list:
+
+- **Group Initiative** - Edit once, applies to all members
+- **Member Management** - Add/remove tokens from groups
+- **Collective Actions** - All members activate together on their turn
+
+#### Group Staging System
+
+**Active Groups:** Participate normally in initiative order
+**Staged Groups:** Visible in the list but not participating in initiative
+
+**Staging Controls:**
+- **Activate Group** - Bring staged group into active initiative
+- **Stage Group** - Remove group from active initiative (but keep visible in list)
+- **Visibility option** - Optionally hide staged group tokens from players
+- **Ungroup** - Moves all grouped participants from group to main initiative as individual items
+
+<img src="https://battle-board.onrender.com/screenshots/group-staging.png" alt="Group Staging" style="max-width: 100%; height: auto;">
+
+**Common Use Cases:**
+- **Room-by-room dungeons** - Stage groups for each room on a large map
+- **Reinforcements** - Stage backup monsters to arrive mid-combat
+- **Encounter phases** - Stage different monster sets for multi-phase boss fights
+- **Environmental hazards** - Stage trap or hazard groups with delayed activation
 
 ---
 
-## Initiative Order & Decimals
+## Player vs GM Experience
 
-Battle Board sorts initiative using a **bucket + tie-breaker system**:
+### GM Interface
+The GM sees the complete Battle Board interface with full control:
 
-1. **Whole numbers first** → Higher integers beat lower ones.  
-   - Example: `13` goes before any `12.x`.  
-2. **Decimals break ties** → Lower decimals act earlier.  
-   - Example: `12.1` goes before `12.2`.  
-3. **Name fallback** → Exact ties (`12.1` vs `12.1`) sort alphabetically.  
+- **Complete Initiative List** with all tokens and stats
+- **Full Stat Editing** capabilities
+- **Range Ring Controls** and DM preview toggles
+- **Group Management** tools
+- **Settings Access** and customization options
+- **Combat Controls** (Start/End, Next/Prev turn)
 
-### Example Order
-`13` → `12` → `12.1` → `12.2` → `12.3` 
+### Player Interface
+Players see a streamlined view focused on essential information:
 
----
+**When Combat Started:**
+- **Initiative Order** with creature names
+- **Health Information** (if enabled by GM)
+- **Active Turn Indicator** with visual highlighting
+- **Range Rings** for active Player Characters (if enabled)
 
-### DM Tips: Using Decimals
-- Use `.1`, `.2`, `.3` to break ties without re-rolling.  
-- Need to insert mid-round? Give a creature `12.4` to slot it at the end of the `12s`.  
-- Boss + minions? Boss = `14`, Minions = `14.1`, `14.2`.  
-- Decimals round to **one place**. Typing `12.15` becomes `12.2`.
+<img src="https://battle-board.onrender.com/screenshots/player-interface-active.png" alt="Player Interface - Active" style="max-width: 100%; height: auto;">
 
----
+**Before Combat Starts:**
+- Simple message: *"Initiative has not started yet."*
 
-## Expanded Info Panels
+<img src="https://battle-board.onrender.com/screenshots/player-interface-waiting.png" alt="Player Interface - Waiting" style="max-width: 100%; height: auto;">
 
-Click the chevron or name to expand a row.
+**When Disabled:**
+- Clear message: *"The DM has disabled the player initiative list."*
 
-- **Player Character Toggle** – mark/unmark as PC.  
-- **Overlays** – full controls for rings (color, weight, dash, opacity).  
-- **Distances** – auto-calculated from **edge to edge**:
-  - `< 5 ft` displays as **Touch**.  
-  - Sorted shortest → longest.  
-- **Tooltip** explains: *“Measured edge-to-edge; attack range must be greater than distance. So if distance is 5ft, a 5ft attack range is not enough”*  
+<img src="https://battle-board.onrender.com/screenshots/player-interface-disabled.png" alt="Player Interface - Disabled" style="max-width: 100%; height: auto;">
 
-![Info Panel](https://battle-board.onrender.com/screenshots/infoPanel.png)
+### Permission System
+The GM has granular control over what players can see:
 
-## Movement & Attack Range Rings
-
-Battle Board can draw rings around tokens for tactical play.
-
-- **Movement Rings** – unattached (doesn’t move with the token).  
-- **Attack Range Rings** – attached (moves with the token).  
-- **DM Preview Rings** – toggle per row, visible to DM only.  
-
-### Styling Controls
-- Color (16 palette)  
-- Line weight (2–28px)  
-- Pattern (solid/dash)  
-- Opacity (0–100%)  
-
-### Distance Controls
-- Enter values in **units** not **cells** for both **Movement** and **Attack Range** (i.e. 50 ft not 10 cells).  
-- Rings resize automatically when stats are updated.  
+- **Initiative List Visibility** - Show/hide entire list
+- **Health Information** - None/Status/Numbers per creature type
+- **Range Rings** - Enable for Player Characters during their turn
+- **Distance Information** - Available in player expanded views
 
 ---
 
-## Running Combat
+## Advanced Features
 
-At the bottom of the sidebar:
+### Comprehensive Settings
 
-- **Start Combat** → activates the first creature.  
-- **End Combat** → clears active state and rings.  
-- **Next / Previous Turn** → cycles active creature.  
-- **Round Counter** → increments automatically at the end of initiative order.  
-- **Settings** ⚙️ → open extension options.  
-- **Patreon** ❤️ → support development.  
+#### Display Settings - GM Columns
+Control what information appears in your GM interface:
 
-![Round Controls](https://battle-board.onrender.com/screenshots/controlBar.png)
+- **Armor Class Column** - Show/hide AC values
+- **Hit Points Columns** - Toggle Current/Max/Temp HP display  
+- **DM Ring Toggle** - Show/hide the radar icon for ring previews
 
----
+<img src="https://battle-board.onrender.com/screenshots/settings-gm-columns.png" alt="Settings - GM Columns" style="max-width: 100%; height: auto;">
 
-## Settings
+#### Display Settings - Player Columns  
+Configure what players can see:
 
-Accessible to the GM only.
+**Health Status Master Toggle:**
+- Enable/disable all health information for players
 
-![Settings](https://battle-board.onrender.com/screenshots/settings.png)
+**Per-Faction Health Display:**
+- **Player Characters:** None / Status / Numbers
+- **NPCs:** None / Status / Numbers
 
-### DM Display Settings
-- **Armor** – show/hide AC column  
-- **HP** – show/hide Current/Max/Temp HP columns 
-- **DM Ring Toggle** – show/hide DM-only button 
+**Range Ring Display:**
+- Show movement/attack rings for active Player Characters
 
-### Player Display Settings
-- **Display Health Status** – toggle health visibility column for all 
-- **Player Characters** – Choose health display for PC (none, status, numbers) 
-- **NPCs** – Choose health display for NPCs (none, status, numbers)
-- **Show Range Rings for PCs** – allow rings for active PCs only 
+<img src="https://battle-board.onrender.com/screenshots/settings-player-columns.png" alt="Settings - Player Columns" style="max-width: 100%; height: auto;">
 
-### Info Panel Settings
-- **Distances** – show/hide distance panel  
+#### Info Panel Settings
+- **Distance Calculations** - Enable/disable the distance panel in expanded rows
 
-### Gameplay
-- **Disable Player Initiative List** – hide list entirely from players  
+#### Gameplay Settings
+- **Player Initiative List** - Show/hide the entire initiative interface from players
+- **Group Staging Controls Visibility** - Whether staging/unstaging groups affects token visibility
 
+<img src="https://battle-board.onrender.com/screenshots/settings-gameplay.png" alt="Settings - Gameplay" style="max-width: 100%; height: auto;">
 
-
-### Health Visibility
-- **Player Characters**  
-  - *None* → hide  
-  - *Status* → Healthy/Bloodied (>50% / <50%)  
-  - *Number* → Current/Max HP  
-
-- **NPCs**  
-  - *None*, *Status*, *Number* (same as PCs)  
-
-### Utility
-- **Clear All from Initiative** → removes all creatures and ends combat 
-
-
+### Data Storage
+Battle Board saves all information directly to your scene and token metadata:
+- **Stats and Health** persist across sessions
+- **Initiative Order** maintained between browser reloads
+- **Group Memberships** stored permanently with your tokens
+- **Ring Preferences** remembered per token
 
 ---
 
-## Player View
+## Tips & Best Practices
 
-Players see a simplified tracker:
+### Initiative Management
+- **Roll initiative normally** - Battle Board tracks the results, doesn't replace rolling
+- **Use decimals for tie-breaking** - `.1`, `.2`, `.3` are easier to manage than complex decimals
+- **Plan for insertions** - Leave gaps like `15` → `13` → `11` for mid-combat additions
+- **Group similar creatures** - All goblins can share initiative and act together
 
-![Round Not Starter](https://battle-board.onrender.com/screenshots/playerViewNoCombat.png)
+### Health Tracking  
+- **Set Max HP first** - Current HP auto-adjusts proportionally
+- **Use math input** - `-8` is faster than calculating `23-8=15`
+- **Track temp HP separately** - It automatically layers on top of current HP
+- **Monitor status colors** - Green/Yellow/Red provide quick visual health assessment
 
-- INIT + NAME  
-- Health info (if allowed by GM)  
-- Range rings (only for **active PCs** if enabled)  
+### Range Management
+- **Start with defaults** - Green movement, red attack ranges work well
+- **Use DM previews for planning** - Toggle rings to visualize encounter positioning
+- **Customize per creature type** - Different colors for different monster abilities
+- **Test range interactions** - Use distance calculations to verify attack possibilities
 
-![Player View](https://battle-board.onrender.com/screenshots/playerView.png)
-- If disabled, players see:  
-  *“The DM has disabled the player initiative list.”*  
+### Group Strategies
 
-![Player View Disabled](https://battle-board.onrender.com/screenshots/DMdisabled.png)
+**For Minion Management:**
+- **Group identical creatures** - All goblins, all zombies, etc.
+- **Keep bosses separate** - Major creatures deserve individual initiatives
+- **Use shared initiative** - Let groups of minions act on the same rolled initiative
+- **Reduce turn complexity** - One "Next" click for an entire goblin warband
+
+**For Multi-Encounter Planning:**
+- **Pre-place all encounters** on large dungeon maps
+- **Stage groups by area** - "Goblin Barracks", "Throne Room Guards", etc.
+- **Plan reinforcement timing** - Stage backup waves for dramatic encounters
+- **Use visibility controls** - Hide staged tokens until they're needed
+
+### Large Combat Management
+- **Bulk add tokens** first, then organize into logical groups
+- **Use player visibility settings** to reduce information overload
+- **Leverage distance calculations** for quick tactical decisions  
+- **Stage complex encounters** in phases rather than overwhelming players
+
+### Player Experience
+- **Configure health visibility** thoughtfully - Status often works better than raw numbers
+- **Enable PC rings** for enhanced tactical play
+- **Keep initiative list enabled** unless you need complete secrecy
+- **Communicate group actions** - Let players know when minion groups are acting together
 
 ---
 
-## Extra Tips
+## Support & Development
 
-- **Math Input**: In HP fields, type `15-3+2` and it auto-calculates.  
-- **Rings Auto-Update**: Adjusting movement/range instantly resizes overlays.  
-- **Metadata Sync**: All stats save into token metadata → initiative persists across reloads.  
-- **Patreon Button**: Quick link to support the project.  
+Battle Board is actively developed and supported. For feature requests, bug reports, or to support development:
 
+- **GitHub Repository:** [Battle Board on GitHub](https://github.com/MissingLinkDev/battle-board)
+- **Support Development:** [Patreon - Missing Link Dev](https://www.patreon.com/MissingLinkDev)
+- **Community Support:** Join discussions in the Owlbear Rodeo Discord
+
+---
+
+*Battle Board transforms your Owlbear Rodeo sessions with initiative tracking and combat management. From quick skirmishes to complex multi-group encounters, Battle Board scales to meet your needs while maintaining the simplicity that makes Owlbear Rodeo great.*

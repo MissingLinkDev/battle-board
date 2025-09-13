@@ -2,7 +2,7 @@
 title: Battle Board
 description: Battle Board transforms your Owlbear Rodeo sessions with initiative tracking and combat management. From quick skirmishes to complex multi-group encounters, Battle Board scales to meet your needs while maintaining the simplicity that makes Owlbear Rodeo great.
 author: Missing Link Dev
-image: https://battle-board.onrender.com/screenshots/example.png
+image: https://battle-board.onrender.com/screenshots/range-overlays.png
 icon: https://battle-board.onrender.com/icon.svg
 tags:
   - tool
