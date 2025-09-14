@@ -172,7 +172,12 @@ export default function GmTable({
         return { activeRenderItems: active, stagedRenderItems: staged };
     }, [items, groups]);
 
-    const handleGroupStagingToggle = async (_groupId: string, _staged: boolean) => {
+    const handleGroupStagingToggle = async (_groupId: string, staged: boolean, wasActiveInCombat?: boolean) => {
+        // If we're staging an active group during combat, advance the turn
+        if (staged && wasActiveInCombat) {
+            // The group was active and is now being staged, so advance to next turn
+            await onNext();
+        }
         onRequestResize?.();
     };
 

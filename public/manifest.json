@@ -1,6 +1,6 @@
 {
     "name": "Battle Board",
-    "version": "2.0.1",
+    "version": "2.0.2",
     "manifest_version": 1,
     "author": "Missing Link Dev",
     "description": "Initiative tracker with range overlays, distance calculations, health management, and advanced group controls.",

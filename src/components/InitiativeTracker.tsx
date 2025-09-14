@@ -61,7 +61,7 @@ export function InitiativeTracker() {
 
     // Turn management - now includes groups
     const { handleStart, handleEnd, handleNext, handlePrev } = useTurns(
-        rows, setRows, round, setRound, started, setStarted, saveSceneState, groups
+        setRows, round, setRound, started, setStarted, saveSceneState
     );
 
     // Token management

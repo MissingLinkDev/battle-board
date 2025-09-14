@@ -1,7 +1,7 @@
 import OBR from "@owlbear-rodeo/sdk";
-import { META_KEY } from "../components/metadata";
+import { META_KEY, isMetadata } from "../components/metadata";
 import { clearRings } from "../components/rings";
-import { setGroupActive, clearAllGroupsActive } from "../components/SceneState";
+import { setGroupActive, clearAllGroupsActive, getGroups } from "../components/SceneState";
 import type { InitiativeItem } from "../components/InitiativeItem";
 import type { Group } from "../components/SceneState";
 
@@ -9,254 +9,301 @@ import type { Group } from "../components/SceneState";
 type TurnItem = {
     type: 'group';
     group: Group;
-    items: InitiativeItem[];
+    memberIds: string[];
 } | {
     type: 'individual';
-    item: InitiativeItem;
+    itemId: string;
 };
 
+// Single source of truth for getting current initiative state
+async function getCurrentInitiativeState(): Promise<{
+    items: Map<string, InitiativeItem>;
+    groups: Group[];
+    turnOrder: TurnItem[];
+    activeIndex: number;
+}> {
+    // Get fresh groups from scene state
+    const groups = await getGroups();
+
+    // Get fresh items from OBR
+    const obrItems = await OBR.scene.items.getItems();
+    const items = new Map<string, InitiativeItem>();
+
+    for (const item of obrItems) {
+        const meta = (item.metadata as any)?.[META_KEY];
+        if (meta && isMetadata(meta) && meta.inInitiative !== false) {
+            items.set(item.id, {
+                id: item.id,
+                name: meta.name || "",
+                initiative: meta.initiative || 0,
+                active: meta.active || false,
+                visible: item.visible !== false,
+                ac: meta.ac || 0,
+                currentHP: meta.currentHP || 0,
+                maxHP: meta.maxHP || 0,
+                tempHP: meta.tempHP || 0,
+                movement: meta.movement || 30,
+                attackRange: meta.attackRange || 60,
+                playerCharacter: meta.playerCharacter || false,
+                groupId: meta.groupId || null,
+                movementColor: meta.movementColor,
+                rangeColor: meta.rangeColor,
+                movementWeight: meta.movementWeight,
+                rangeWeight: meta.rangeWeight,
+                movementPattern: meta.movementPattern,
+                rangePattern: meta.rangePattern,
+                movementOpacity: meta.movementOpacity,
+                rangeOpacity: meta.rangeOpacity,
+                dmPreview: meta.dmPreview,
+                inInitiative: meta.inInitiative,
+            });
+        }
+    }
+
+    // Build turn order
+    const turnOrder: TurnItem[] = [];
+    const usedItemIds = new Set<string>();
+
+    // Add non-staged groups
+    for (const group of groups) {
+        if (!group.staged) {
+            const memberIds: string[] = [];
+            for (const [id, item] of items) {
+                if (item.groupId === group.id) {
+                    memberIds.push(id);
+                    usedItemIds.add(id);
+                }
+            }
+            if (memberIds.length > 0) {
+                turnOrder.push({
+                    type: 'group',
+                    group,
+                    memberIds
+                });
+            }
+        }
+    }
+
+    // Add ungrouped individuals
+    for (const [id, item] of items) {
+        if (!usedItemIds.has(id) && !item.groupId) {
+            turnOrder.push({
+                type: 'individual',
+                itemId: id
+            });
+        }
+    }
+
+    // Sort by initiative
+    turnOrder.sort((a, b) => {
+        const aInit = a.type === 'group' ? a.group.initiative : items.get(a.itemId)?.initiative || 0;
+        const bInit = b.type === 'group' ? b.group.initiative : items.get(b.itemId)?.initiative || 0;
+
+        const af = Math.floor(aInit);
+        const bf = Math.floor(bInit);
+
+        if (bf !== af) return bf - af;
+        if (aInit !== bInit) return aInit - bInit;
+
+        const aName = a.type === 'group' ? a.group.name : items.get(a.itemId)?.name || "";
+        const bName = b.type === 'group' ? b.group.name : items.get(b.itemId)?.name || "";
+        return aName.localeCompare(bName);
+    });
+
+    // Find current active index
+    let activeIndex = -1;
+    for (let i = 0; i < turnOrder.length; i++) {
+        const turn = turnOrder[i];
+        if (turn.type === 'group') {
+            if (turn.group.active) {
+                activeIndex = i;
+                break;
+            }
+        } else {
+            const item = items.get(turn.itemId);
+            if (item?.active) {
+                activeIndex = i;
+                break;
+            }
+        }
+    }
+
+    return { items, groups, turnOrder, activeIndex };
+}
+
+// Single atomic update for setting active turn
+async function setActiveTurn(
+    turnItem: TurnItem | null,
+    allItemIds: string[],
+    setRows: React.Dispatch<React.SetStateAction<InitiativeItem[]>>
+) {
+    // First, clear all groups' active state
+    await clearAllGroupsActive();
+
+    // Prepare the OBR update - all items set to inactive first
+    const updates: { [id: string]: boolean } = {};
+    for (const id of allItemIds) {
+        updates[id] = false;
+    }
+
+    // Then set the new active item(s)
+    if (turnItem) {
+        if (turnItem.type === 'group') {
+            // Set group as active in scene state
+            await setGroupActive(turnItem.group.id, true);
+            // Mark all group members as active
+            for (const memberId of turnItem.memberIds) {
+                updates[memberId] = true;
+            }
+        } else {
+            // Mark individual as active
+            updates[turnItem.itemId] = true;
+        }
+    }
+
+    // Single atomic update to OBR
+    await OBR.scene.items.updateItems(allItemIds, (items) => {
+        for (const item of items) {
+            const meta = (item.metadata as any)?.[META_KEY];
+            if (meta) {
+                meta.active = updates[item.id] || false;
+            }
+        }
+    });
+
+    // Update local state to match
+    setRows(prev => prev.map(row => ({
+        ...row,
+        active: updates[row.id] || false
+    })));
+}
+
 export function useTurns(
-    rows: InitiativeItem[],
     setRows: React.Dispatch<React.SetStateAction<InitiativeItem[]>>,
     round: number,
     setRound: (n: number) => void,
     started: boolean,
     setStarted: (b: boolean) => void,
     saveSceneState: (started: boolean, round: number) => Promise<void>,
-    groups: Group[],
 ) {
-    // Create sorted turn order mixing groups and individuals - ONLY non-staged groups
-    const createTurnOrder = (items: InitiativeItem[], groups: Group[]): TurnItem[] => {
-        const result: TurnItem[] = [];
-
-        // Group items by their groupId
-        const groupedItems = new Map<string, InitiativeItem[]>();
-        const individualItems: InitiativeItem[] = [];
-
-        for (const item of items) {
-            if (item.groupId) {
-                const existing = groupedItems.get(item.groupId) || [];
-                existing.push(item);
-                groupedItems.set(item.groupId, existing);
-            } else {
-                individualItems.push(item);
-            }
-        }
-
-        // Add groups that have members and are NOT staged
-        for (const group of groups) {
-            const groupItems = groupedItems.get(group.id);
-            if (groupItems && groupItems.length > 0 && !group.staged) {
-                result.push({
-                    type: 'group',
-                    group: group,
-                    items: groupItems
-                });
-            }
-        }
-
-        // Add individual items (they're always participating)
-        for (const item of individualItems) {
-            result.push({
-                type: 'individual',
-                item: item
-            });
-        }
-
-        // Sort by initiative
-        result.sort((a, b) => {
-            const aInit = a.type === 'group' ? a.group.initiative : a.item.initiative;
-            const bInit = b.type === 'group' ? b.group.initiative : b.item.initiative;
-
-            const af = Math.floor(aInit);
-            const bf = Math.floor(bInit);
-
-            if (bf !== af) return bf - af; // higher integer first
-            if (aInit !== bInit) return aInit - bInit; // then smaller decimal first
-
-            // Stable sort by name
-            const aName = a.type === 'group' ? a.group.name : a.item.name;
-            const bName = b.type === 'group' ? b.group.name : b.item.name;
-            return aName.localeCompare(bName);
-        });
-
-        return result;
-    };
-
-    const getActiveIndex = (turnOrder: TurnItem[]) => {
-        return turnOrder.findIndex((item) => {
-            if (item.type === 'group') {
-                return item.group.active && !item.group.staged;
-            } else {
-                return item.item.active;
-            }
-        });
-    };
-
-    // Helper function to update group member metadata
-    const updateGroupMembersMetadata = async (groupItems: InitiativeItem[], active: boolean) => {
-        const groupMemberIds = groupItems.map(item => item.id);
-        if (groupMemberIds.length > 0) {
-            await OBR.scene.items.updateItems(groupMemberIds, (items) => {
-                for (const it of items) {
-                    const meta = (it.metadata as any)[META_KEY];
-                    if (meta) meta.active = active;
-                }
-            });
-        }
-    };
+    // Prevent double-clicks with a simple lock
+    let isProcessing = false;
 
     const handleStart = async () => {
-        const turnOrder = createTurnOrder(rows, groups);
-        if (!turnOrder.length) return;
+        if (isProcessing) return;
+        isProcessing = true;
 
-        // Clear all active states first
-        await clearAllGroupsActive();
-        setRows(prev => prev.map(r => ({ ...r, active: false })));
+        try {
+            const state = await getCurrentInitiativeState();
+            if (state.turnOrder.length === 0) return;
 
-        // Set first item/group as active
-        const firstItem = turnOrder[0];
-        if (firstItem.type === 'group') {
-            await setGroupActive(firstItem.group.id, true);
-            // Set all group members as active in local state
-            setRows(prev => prev.map(r => ({
-                ...r,
-                active: r.groupId === firstItem.group.id
-            })));
-            // Update group member metadata
-            await updateGroupMembersMetadata(firstItem.items, true);
-        } else {
-            setRows(prev => prev.map(r => ({
-                ...r,
-                active: r.id === firstItem.item.id
-            })));
-            await OBR.scene.items.updateItems([firstItem.item.id], (items) => {
-                const meta = (items[0].metadata as any)[META_KEY];
-                if (meta) meta.active = true;
-            });
+            // Set first item as active
+            const allItemIds = Array.from(state.items.keys());
+            await setActiveTurn(state.turnOrder[0], allItemIds, setRows);
+
+            // Update round and started state
+            setRound(1);
+            setStarted(true);
+            await saveSceneState(true, 1);
+        } finally {
+            isProcessing = false;
         }
-
-        setRound(1);
-        setStarted(true);
-        await saveSceneState(true, 1);
     };
 
     const handleEnd = async () => {
-        // Clear all active states
-        await clearAllGroupsActive();
-        const ids = rows.map((r) => r.id);
-        setRows(prev => prev.map(r => ({ ...r, active: false })));
+        if (isProcessing) return;
+        isProcessing = true;
 
-        await OBR.scene.items.updateItems(ids, (items) => {
-            for (const it of items) {
-                const meta = (it.metadata as any)[META_KEY];
-                if (meta) meta.active = false;
-            }
-        });
+        try {
+            const state = await getCurrentInitiativeState();
+            const allItemIds = Array.from(state.items.keys());
 
-        setRound(0);
-        setStarted(false);
-        await clearRings("normal");
-        await saveSceneState(false, 0);
+            // Clear all active states
+            await setActiveTurn(null, allItemIds, setRows);
+
+            // Clear rings and reset state
+            await clearRings("normal");
+            setRound(0);
+            setStarted(false);
+            await saveSceneState(false, 0);
+        } finally {
+            isProcessing = false;
+        }
     };
 
     const handleNext = async () => {
-        if (!started) return;
+        if (isProcessing || !started) return;
+        isProcessing = true;
 
-        const turnOrder = createTurnOrder(rows, groups);
-        if (!turnOrder.length) return;
+        try {
+            const state = await getCurrentInitiativeState();
+            if (state.turnOrder.length === 0) return;
 
-        const activeIdx = getActiveIndex(turnOrder);
-        const nextIdx = activeIdx === -1 ? 0 : (activeIdx + 1) % turnOrder.length;
-        const wrapped = activeIdx !== -1 && nextIdx === 0;
-        const nextRound = wrapped ? round + 1 : round;
+            // Calculate next index
+            let nextIndex: number;
+            let shouldIncrementRound = false;
 
-        // Clear all active states first
-        await clearAllGroupsActive();
-        setRows(prev => prev.map(r => ({ ...r, active: false })));
-        await OBR.scene.items.updateItems(rows.map(r => r.id), (items) => {
-            for (const it of items) {
-                const meta = (it.metadata as any)[META_KEY];
-                if (meta) meta.active = false;
+            if (state.activeIndex === -1) {
+                // No active item, start from beginning
+                nextIndex = 0;
+            } else {
+                // Move to next
+                nextIndex = (state.activeIndex + 1) % state.turnOrder.length;
+                // Check if we wrapped around
+                shouldIncrementRound = (nextIndex === 0);
             }
-        });
 
-        // Set next item/group as active
-        const nextItem = turnOrder[nextIdx];
-        if (nextItem.type === 'group') {
-            await setGroupActive(nextItem.group.id, true);
-            // Set all group members as active in local state
-            setRows(prev => prev.map(r => ({
-                ...r,
-                active: r.groupId === nextItem.group.id
-            })));
-            // Update group member metadata
-            await updateGroupMembersMetadata(nextItem.items, true);
-        } else {
-            setRows(prev => prev.map(r => ({
-                ...r,
-                active: r.id === nextItem.item.id
-            })));
-            await OBR.scene.items.updateItems([nextItem.item.id], (items) => {
-                const meta = (items[0].metadata as any)[META_KEY];
-                if (meta) meta.active = true;
-            });
-        }
+            // Set the new active turn
+            const allItemIds = Array.from(state.items.keys());
+            await setActiveTurn(state.turnOrder[nextIndex], allItemIds, setRows);
 
-        // Update round and save when wrapping to next round
-        if (wrapped) {
-            setRound(nextRound);
-            await saveSceneState(true, nextRound);
+            // Update round if we wrapped
+            if (shouldIncrementRound) {
+                const newRound = round + 1;
+                setRound(newRound);
+                await saveSceneState(true, newRound);
+            }
+        } finally {
+            isProcessing = false;
         }
     };
 
     const handlePrev = async () => {
-        if (!started) return;
+        if (isProcessing || !started) return;
+        isProcessing = true;
 
-        const turnOrder = createTurnOrder(rows, groups);
-        if (!turnOrder.length) return;
+        try {
+            const state = await getCurrentInitiativeState();
+            if (state.turnOrder.length === 0) return;
 
-        const activeIdx = getActiveIndex(turnOrder);
-        const prevIdx = activeIdx === -1 ? turnOrder.length - 1 : (activeIdx - 1 + turnOrder.length) % turnOrder.length;
-        const wrappedBack = activeIdx === 0;
-        const nextRound = wrappedBack ? Math.max(1, round - 1) : round;
+            // Calculate previous index
+            let prevIndex: number;
+            let shouldDecrementRound = false;
 
-        // Clear all active states first
-        await clearAllGroupsActive();
-        setRows(prev => prev.map(r => ({ ...r, active: false })));
-        await OBR.scene.items.updateItems(rows.map(r => r.id), (items) => {
-            for (const it of items) {
-                const meta = (it.metadata as any)[META_KEY];
-                if (meta) meta.active = false;
+            if (state.activeIndex === -1) {
+                // No active item, go to last
+                prevIndex = state.turnOrder.length - 1;
+            } else if (state.activeIndex === 0) {
+                // At beginning, wrap to end
+                prevIndex = state.turnOrder.length - 1;
+                shouldDecrementRound = true;
+            } else {
+                // Move to previous
+                prevIndex = state.activeIndex - 1;
             }
-        });
 
-        // Set previous item/group as active
-        const prevItem = turnOrder[prevIdx];
-        if (prevItem.type === 'group') {
-            await setGroupActive(prevItem.group.id, true);
-            // Set all group members as active in local state
-            setRows(prev => prev.map(r => ({
-                ...r,
-                active: r.groupId === prevItem.group.id
-            })));
-            // Update group member metadata
-            await updateGroupMembersMetadata(prevItem.items, true);
-        } else {
-            setRows(prev => prev.map(r => ({
-                ...r,
-                active: r.id === prevItem.item.id
-            })));
-            await OBR.scene.items.updateItems([prevItem.item.id], (items) => {
-                const meta = (items[0].metadata as any)[META_KEY];
-                if (meta) meta.active = true;
-            });
-        }
+            // Set the new active turn
+            const allItemIds = Array.from(state.items.keys());
+            await setActiveTurn(state.turnOrder[prevIndex], allItemIds, setRows);
 
-        // Update round and save when wrapping back to previous round
-        if (wrappedBack) {
-            setRound(nextRound);
-            await saveSceneState(true, nextRound);
+            // Update round if we wrapped backward
+            if (shouldDecrementRound && round > 1) {
+                const newRound = round - 1;
+                setRound(newRound);
+                await saveSceneState(true, newRound);
+            }
+        } finally {
+            isProcessing = false;
         }
     };
 

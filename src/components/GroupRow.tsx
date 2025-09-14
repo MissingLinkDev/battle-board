@@ -19,7 +19,7 @@ import type { CMToken } from "./tokens";
 import { CommitNumberField } from "./CommitFields";
 import InitiativeRow from "./InitiativeRow";
 import { updateGroupInitiative, setGroupActive, setGroupStaged } from "./SceneState";
-import { removeTokenFromGroup, updateGroupTokensVisibility } from "./metadata";
+import { removeTokenFromGroup, updateGroupTokensVisibility, batchUpdateMeta } from "./metadata";
 import { useContextMenu } from "../hooks/useContextMenu";
 import { GroupRowContextMenu } from "./GroupRowContextMenu";
 import OBR from "@owlbear-rodeo/sdk";
@@ -71,7 +71,7 @@ export default function GroupRow({
     groups,
     expandedIds,
     onToggleItemExpand,
-    staged = false, // Default to false (participating in initiative)
+    staged = false,
     onGroupStagingToggle,
     onGroupUngroup,
 }: Props) {
@@ -97,7 +97,6 @@ export default function GroupRow({
     const handleInitiativeChange = async (newInitiative: number) => {
         try {
             await updateGroupInitiative(group.id, newInitiative);
-            // The parent component should handle re-sorting the list
         } catch (error) {
             console.error("Failed to update group initiative:", error);
         }
@@ -108,6 +107,25 @@ export default function GroupRow({
 
         try {
             const newStaged = !staged;
+            const wasActive = group.active || items.some(item => item.active);
+
+            // If we're staging an active group during combat, we need special handling
+            if (newStaged && wasActive && started) {
+                // First, clear the active state from this group and its members
+                await setGroupActive(group.id, false);
+
+                // Clear active state from all group members in metadata
+                const memberPatches = items.map(item => ({
+                    id: item.id,
+                    patch: { active: false }
+                }));
+                await batchUpdateMeta(OBR, memberPatches);
+
+                // Update local state to reflect members are no longer active
+                items.forEach(item => {
+                    onRowChange(item.id, { active: false });
+                });
+            }
 
             // Update the group's staged status
             await setGroupStaged(group.id, newStaged);
@@ -123,13 +141,25 @@ export default function GroupRow({
                 }
             }
 
-            // If staging (removing from active initiative), set group as inactive
-            if (newStaged) {
+            // If unstaging (adding to active initiative), ensure group is not active yet
+            if (!newStaged) {
                 await setGroupActive(group.id, false);
+
+                // Ensure members don't have lingering active state
+                const memberPatches = items.map(item => ({
+                    id: item.id,
+                    patch: { active: false }
+                }));
+                await batchUpdateMeta(OBR, memberPatches);
+
+                // Update local state
+                items.forEach(item => {
+                    onRowChange(item.id, { active: false });
+                });
             }
 
-            // Pass the active state to parent so it can handle turn advancement if needed
-            onGroupStagingToggle(group.id, newStaged, isActive && started);
+            // Notify parent - let it handle turn advancement if needed
+            onGroupStagingToggle(group.id, newStaged, wasActive && started);
         } catch (error) {
             console.error("Failed to toggle group staging:", error);
         }
@@ -154,7 +184,7 @@ export default function GroupRow({
     };
 
     const isActive = items.some(item => item.active) && !staged;
-    const displayInitiative = group.initiative; // Always show actual initiative
+    const displayInitiative = group.initiative;
 
     // Calculate how many columns the name should span
     const nameColSpan = 1 + (vis.ac ? 1 : 0) + (vis.hp ? 2 : 0) + (vis.dmr ? 1 : 0);
@@ -173,7 +203,7 @@ export default function GroupRow({
                     }),
                     "& td": { py: 0.5, px: 0.5 },
                     borderLeft: isActive ? "3px solid" : "3px solid transparent",
-                    borderLeftColor: isActive ? "warning.light" : "transparent", // Different color for groups
+                    borderLeftColor: isActive ? "warning.light" : "transparent",
                     bgcolor: "action.hover",
                 }}
             >
@@ -247,7 +277,7 @@ export default function GroupRow({
                             )}
                         </Box>
 
-                        {/* Right side - Action buttons (only show if DM ring toggle is enabled) */}
+                        {/* Right side - Action buttons */}
                         <Box sx={{ display: "flex", gap: 0.25, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
                             {/* Initiative Staging Toggle Button */}
                             <Tooltip
@@ -328,7 +358,7 @@ export default function GroupRow({
                     colSpan={colSpan}
                     ready={ready}
                     groups={groups}
-                    hideInitiative={true} // Hide initiative field for group members
+                    hideInitiative={true}
                 />
             ))}
         </>
