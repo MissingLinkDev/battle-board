@@ -447,7 +447,6 @@ export default function GmTable({
                         borderTop: 1,
                         borderColor: "divider",
                         flexShrink: 0,
-                        maxHeight: 200, // Limit height so it doesn't take over
                         overflow: "auto",
                     }}
                 >
