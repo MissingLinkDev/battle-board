@@ -41,13 +41,13 @@ That's it! You now have a fully functional initiative tracker with automatic ran
 - Select **"Add to Battle Board"** (for tokens not yet added)
 - Select **"Remove from Battle Board"** (for tokens already added)
 
-<img src="https://battle-board.onrender.com/screenshots/context-menu-add.png" alt="Context Menu" style="max-width: 100%; height: auto;">
+<img src="https://battle-board.missinglinkdev.com/screenshots/context-menu-add.png" alt="Context Menu" style="max-width: 100%; height: auto;">
 
 **Bulk Add Methods:**
 - **"Add All in Scene"** - Adds every CHARACTER/MOUNT token
 - **"Add Visible Only"** - Adds only tokens currently visible to players
 
-<img src="https://battle-board.onrender.com/screenshots/bulk-add-buttons.png" alt="Bulk Add Buttons" style="max-width: 100%; height: auto;">
+<img src="https://battle-board.missinglinkdev.com/screenshots/bulk-add-buttons.png" alt="Bulk Add Buttons" style="max-width: 100%; height: auto;">
 
 #### Smart Initiative System
 After players and GMs roll initiative, Battle Board uses a sophisticated ordering system:
@@ -58,7 +58,7 @@ After players and GMs roll initiative, Battle Board uses a sophisticated orderin
 
 **Example order:** `15` → `14` → `13.1` → `13.5` → `13.9` → `12`
 
-<img src="https://battle-board.onrender.com/screenshots/initiative-order.png" alt="Initiative Order" style="max-width: 100%; height: auto;">
+<img src="https://battle-board.missinglinkdev.com/screenshots/initiative-order.png" alt="Initiative Order" style="max-width: 100%; height: auto;">
 
 **Using Decimals to Break Ties:**
 When multiple creatures roll the same initiative, use decimals to establish order:
@@ -72,7 +72,7 @@ When multiple creatures roll the same initiative, use decimals to establish orde
 - **Round Counter** - Automatically increments when reaching the end of initiative
 - **Active Highlighting** - Current turn is clearly marked with visual indicators
 
-<img src="https://battle-board.onrender.com/screenshots/turn-controls.png" alt="Turn Controls" style="max-width: 100%; height: auto;">
+<img src="https://battle-board.missinglinkdev.com/screenshots/turn-controls.png" alt="Turn Controls" style="max-width: 100%; height: auto;">
 
 ### Token Stats & Health Management
 
@@ -84,7 +84,7 @@ Every token row provides quick access to combat-relevant statistics:
 - **Hit Points** - Separate Current/Max HP with temp HP tracking
 - **Name** - Automatically syncs with token labels
 
-<img src="https://battle-board.onrender.com/screenshots/stat-editing.png" alt="Stat Editing" style="max-width: 100%; height: auto;">
+<img src="https://battle-board.missinglinkdev.com/screenshots/stat-editing.png" alt="Stat Editing" style="max-width: 100%; height: auto;">
 
 #### Math Input System
 HP fields support mathematical expressions for quick combat adjustments:
@@ -117,7 +117,7 @@ Battle Board can automatically draw range indicators around tokens:
 - Attached rounded rectangles following token shape
 - Move with the token for dynamic range visualization
 
-<img src="https://battle-board.onrender.com/screenshots/range-overlays.png" alt="Range Overlays" style="max-width: 100%; height: auto;">
+<img src="https://battle-board.missinglinkdev.com/screenshots/range-overlays.png" alt="Range Overlays" style="max-width: 100%; height: auto;">
 
 #### DM Preview Mode
 Each token has a radar icon for DM-only ring previews:
@@ -125,7 +125,7 @@ Each token has a radar icon for DM-only ring previews:
 - Visible only to the GM
 - Perfect for planning encounters
 
-<img src="https://battle-board.onrender.com/screenshots/dm-preview.png" alt="DM Preview" style="max-width: 100%; height: auto;">
+<img src="https://battle-board.missinglinkdev.com/screenshots/dm-preview.png" alt="DM Preview" style="max-width: 100%; height: auto;">
 
 #### Complete Customization
 Expand any token row to access full styling controls:
@@ -135,7 +135,7 @@ Expand any token row to access full styling controls:
 **Patterns:** Solid or dashed lines
 **Opacity:** 0-100% transparency control
 
-<img src="https://battle-board.onrender.com/screenshots/ring-customization.png" alt="Ring Customization" style="max-width: 100%; height: auto;">
+<img src="https://battle-board.missinglinkdev.com/screenshots/ring-customization.png" alt="Ring Customization" style="max-width: 100%; height: auto;">
 
 ### Distance Calculations
 
@@ -147,7 +147,7 @@ When you expand a token row, Battle Board calculates distances to all other toke
 - **"Touch" indicator** for adjacent tokens (< 5ft)
 - **Real-time updates** as tokens move
 
-<img src="https://battle-board.onrender.com/screenshots/distance-panel.png" alt="Distance Panel" style="max-width: 100%; height: auto;">
+<img src="https://battle-board.missinglinkdev.com/screenshots/distance-panel.png" alt="Distance Panel" style="max-width: 100%; height: auto;">
 
 #### Smart Measurements
 - Distances account for token size (not just position)
@@ -171,7 +171,7 @@ Use groups with staging to pre-plan multiple encounters on a single map:
 - **Quick encounter transitions** - Activate staged groups when players move to new areas
 - **Reinforcement management** - Stage reinforcement groups to activate mid-combat
 
-<img src="https://battle-board.onrender.com/screenshots/group-overview.png" alt="Group Management Overview" style="max-width: 100%; height: auto;">
+<img src="https://battle-board.missinglinkdev.com/screenshots/group-overview.png" alt="Group Management Overview" style="max-width: 100%; height: auto;">
 
 #### Creating and Managing Groups
 
@@ -180,7 +180,7 @@ Use groups with staging to pre-plan multiple encounters on a single map:
 2. **Select existing group** or **"Create New Group"**
 3. **All group members share initiative** and act together
 
-<img src="https://battle-board.onrender.com/screenshots/group-creation.png" alt="Group Creation" style="max-width: 100%; height: auto;">
+<img src="https://battle-board.missinglinkdev.com/screenshots/group-creation.png" alt="Group Creation" style="max-width: 100%; height: auto;">
 
 **Group Controls:**
 Groups appear as expandable sections in the initiative list:
@@ -200,7 +200,7 @@ Groups appear as expandable sections in the initiative list:
 - **Visibility option** - Optionally hide staged group tokens from players
 - **Ungroup** - Moves all grouped participants from group to main initiative as individual items
 
-<img src="https://battle-board.onrender.com/screenshots/group-staging.png" alt="Group Staging" style="max-width: 100%; height: auto;">
+<img src="https://battle-board.missinglinkdev.com/screenshots/group-staging.png" alt="Group Staging" style="max-width: 100%; height: auto;">
 
 **Common Use Cases:**
 - **Room-by-room dungeons** - Stage groups for each room on a large map
@@ -231,17 +231,17 @@ Players see a streamlined view focused on essential information:
 - **Active Turn Indicator** with visual highlighting
 - **Range Rings** for active Player Characters (if enabled)
 
-<img src="https://battle-board.onrender.com/screenshots/player-interface-active.png" alt="Player Interface - Active" style="max-width: 100%; height: auto;">
+<img src="https://battle-board.missinglinkdev.com/screenshots/player-interface-active.png" alt="Player Interface - Active" style="max-width: 100%; height: auto;">
 
 **Before Combat Starts:**
 - Simple message: *"Initiative has not started yet."*
 
-<img src="https://battle-board.onrender.com/screenshots/player-interface-waiting.png" alt="Player Interface - Waiting" style="max-width: 100%; height: auto;">
+<img src="https://battle-board.missinglinkdev.com/screenshots/player-interface-waiting.png" alt="Player Interface - Waiting" style="max-width: 100%; height: auto;">
 
 **When Disabled:**
 - Clear message: *"The DM has disabled the player initiative list."*
 
-<img src="https://battle-board.onrender.com/screenshots/player-interface-disabled.png" alt="Player Interface - Disabled" style="max-width: 100%; height: auto;">
+<img src="https://battle-board.missinglinkdev.com/screenshots/player-interface-disabled.png" alt="Player Interface - Disabled" style="max-width: 100%; height: auto;">
 
 ### Permission System
 The GM has granular control over what players can see:
@@ -264,7 +264,7 @@ Control what information appears in your GM interface:
 - **Hit Points Columns** - Toggle Current/Max/Temp HP display  
 - **DM Ring Toggle** - Show/hide the radar icon for ring previews
 
-<img src="https://battle-board.onrender.com/screenshots/settings-gm-columns.png" alt="Settings - GM Columns" style="max-width: 100%; height: auto;">
+<img src="https://battle-board.missinglinkdev.com/screenshots/settings-gm-columns.png" alt="Settings - GM Columns" style="max-width: 100%; height: auto;">
 
 #### Display Settings - Player Columns  
 Configure what players can see:
@@ -279,7 +279,7 @@ Configure what players can see:
 **Range Ring Display:**
 - Show movement/attack rings for active Player Characters
 
-<img src="https://battle-board.onrender.com/screenshots/settings-player-columns.png" alt="Settings - Player Columns" style="max-width: 100%; height: auto;">
+<img src="https://battle-board.missinglinkdev.com/screenshots/settings-player-columns.png" alt="Settings - Player Columns" style="max-width: 100%; height: auto;">
 
 #### Info Panel Settings
 - **Distance Calculations** - Enable/disable the distance panel in expanded rows
@@ -288,7 +288,7 @@ Configure what players can see:
 - **Player Initiative List** - Show/hide the entire initiative interface from players
 - **Group Staging Controls Visibility** - Whether staging/unstaging groups affects token visibility
 
-<img src="https://battle-board.onrender.com/screenshots/settings-gameplay.png" alt="Settings - Gameplay" style="max-width: 100%; height: auto;">
+<img src="https://battle-board.missinglinkdev.com/screenshots/settings-gameplay.png" alt="Settings - Gameplay" style="max-width: 100%; height: auto;">
 
 ### Data Storage
 Battle Board saves all information directly to your scene and token metadata:
