@@ -364,7 +364,6 @@ export default function InitiativeRow({
                                     variant="outlined"
                                     value={row.tempHP}
                                     allowMath
-                                    min={0}
                                     onCommit={commitTempHP}
                                     sx={inputSx}
                                     slotProps={{

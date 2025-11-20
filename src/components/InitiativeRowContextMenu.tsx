@@ -166,7 +166,7 @@ export function InitiativeRowContextMenu({
                     <ListItemIcon>
                         <DeleteForeverRounded />
                     </ListItemIcon>
-                    <ListItemText>Remove</ListItemText>
+                    <ListItemText>Remove from BattleBoard</ListItemText>
                 </MenuItem>
             </Menu>
 

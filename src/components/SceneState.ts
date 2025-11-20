@@ -58,8 +58,8 @@ export const DEFAULT_SETTINGS: InitiativeSettings = {
     showConditions: true,
     showDistances: true,
     // Gameplay
-    // Default the player list to HIDDEN for players (UI toggle will start OFF)
-    disablePlayerList: true,
+    // Default the player list to SHOWN for players (UI toggle will start ON)
+    disablePlayerList: false,
     // Health visibility master switch ON by default
     displayHealthStatusToPlayer: true,
     // Legacy default (used for migration only)
