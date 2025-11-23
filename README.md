@@ -104,6 +104,34 @@ Battle Board automatically calculates and displays health status:
 
 Health visibility to players is fully configurable in settings.
 
+#### Concentration Tracking
+Battle Board includes an intelligent concentration tracking system to help DMs remember to call for concentration checks:
+
+**DM View:**
+- **Concentration Column** - Enable in Display Settings → GM Columns
+- **Checkbox per Token** - Mark which creatures are concentrating on spells
+- **Automatic Reminders** - When a concentrating creature takes damage, an alert appears
+- **Smart DC Calculation** - DC is automatically calculated as the higher of 10 or half damage taken
+
+**Alert System:**
+- Notifications appear as overlay alerts at the top of the screen
+- Shows: "{Creature Name} Concentration Check, DC {XX}"
+- Visible to both GM and players
+- Dismissible by anyone - syncs across all clients when cleared
+
+**Player View:**
+- Concentrating creatures show a grey diamond icon with "C" after their name
+- Same automatic alerts when concentration checks are needed
+- Players can dismiss alerts for their own characters
+
+**Usage:**
+1. Enable "Concentration" in Display Settings → GM Columns
+2. Check the concentration box for any creature maintaining a spell
+3. When that creature takes damage, an alert automatically appears
+4. Make the concentration save, then dismiss the alert
+
+**Example:** A wizard with concentration checked takes 18 damage. Battle Board instantly displays: "Wizard Concentration Check, DC 10" (since half of 18 is 9, which is less than 10).
+
 ### Range Overlay System
 
 #### Automatic Range Rings
@@ -261,7 +289,8 @@ The GM has granular control over what players can see:
 Control what information appears in your GM interface:
 
 - **Armor Class Column** - Show/hide AC values
-- **Hit Points Columns** - Toggle Current/Max/Temp HP display  
+- **Hit Points Columns** - Toggle Current/Max/Temp HP display
+- **Concentration** - Show/hide concentration tracking column with automatic reminders
 - **DM Ring Toggle** - Show/hide the radar icon for ring previews
 
 <img src="https://battle-board.missinglinkdev.com/screenshots/settings-gm-columns.png" alt="Settings - GM Columns" style="max-width: 100%; height: auto;">
@@ -287,6 +316,16 @@ Configure what players can see:
 #### Gameplay Settings
 - **Player Initiative List** - Show/hide the entire initiative interface from players
 - **Group Staging Controls Visibility** - Whether staging/unstaging groups affects token visibility
+- **Player Editable Health** - Allow players to edit HP and Temp HP for their own Player Characters
+
+**Player Editable Health:**
+When enabled, players can manage health for their own characters directly in the initiative tracker:
+- Players see editable HP and Temp HP fields for their Player Characters
+- Same math input support as GM (type `-8` for damage, `+5` for healing)
+- Changes sync instantly across all clients
+- GM retains full editing control over all tokens
+- Only affects tokens marked as Player Characters
+- Helpful for games where players track their own health
 
 <img src="https://battle-board.missinglinkdev.com/screenshots/settings-gameplay.png" alt="Settings - Gameplay" style="max-width: 100%; height: auto;">
 
