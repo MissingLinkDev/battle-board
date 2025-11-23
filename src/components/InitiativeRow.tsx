@@ -11,6 +11,7 @@ import KeyboardArrowUp from "@mui/icons-material/KeyboardArrowUp";
 import Stack from "@mui/material/Stack";
 import VisibilityOffRounded from "@mui/icons-material/VisibilityOffRounded";
 import RadarRounded from "@mui/icons-material/RadarRounded";
+import Checkbox from "@mui/material/Checkbox";
 
 import type { InitiativeItem } from "./InitiativeItem";
 import { CommitNumberField } from "./CommitFields";
@@ -34,6 +35,7 @@ type RowSettings = {
     showAC: boolean;
     showHP: boolean;
     showDMR: boolean;
+    showConc: boolean;
 };
 
 type Props = {
@@ -125,6 +127,7 @@ export default function InitiativeRow({
         conditions: settings?.showConditions ?? true,
         distances: settings?.showDistances ?? true,
         dmr: settings?.showDMR ?? true,
+        conc: settings?.showConc ?? false,
     }), [settings]);
 
     // Event handlers
@@ -394,6 +397,26 @@ export default function InitiativeRow({
                             )}
                         </TableCell>
                     </>
+                )}
+
+                {/* CONCENTRATION */}
+                {vis.conc && (
+                    <TableCell width={28} align="center" onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                            checked={!!row.concentrating}
+                            onChange={(e) => {
+                                e.stopPropagation();
+                                bubble({ concentrating: !row.concentrating });
+                            }}
+                            size="small"
+                            sx={{
+                                p: 0,
+                                width: 24,
+                                height: 24,
+                            }}
+                            aria-label="concentration"
+                        />
+                    </TableCell>
                 )}
 
                 {/* DM PREVIEW TOGGLE */}

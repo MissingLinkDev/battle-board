@@ -29,6 +29,9 @@ export type InitiativeItem = {
     // NEW: Single group ID instead of array
     groupId?: string | null;
 
+    // Concentration tracking
+    concentrating?: boolean;
+
     // DEPRECATED: Keep for migration
     encounterGroups?: string[];
 };
@@ -82,6 +85,9 @@ export function initiativeFromItem(item: Item): InitiativeItem | null {
         // Use migrated groupId or original
         groupId: groupId ?? null,
 
+        // Concentration tracking
+        concentrating: meta.concentrating ?? false,
+
         // Keep legacy data during transition
         encounterGroups: encounterGroups ?? [],
     };
@@ -120,6 +126,9 @@ export function metaPatchFromRowDiff(before: InitiativeItem, after: InitiativeIt
 
     // Handle groupId change
     assign("groupId");
+
+    // Concentration tracking
+    assign("concentrating");
 
     // Legacy: still handle encounterGroups for backward compatibility
     assign("encounterGroups");

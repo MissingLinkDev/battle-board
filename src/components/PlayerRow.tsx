@@ -16,6 +16,8 @@ import { HealthDisplay } from "./HealthDisplay";
 import { DistancePanel } from "./DistancePanel";
 import { useDistances } from "../hooks/useDistances";
 import { useHealthLogic } from "../hooks/useHealthLogic";
+import { useHPEditing } from "../hooks/useHPEditing";
+import { CommitNumberField } from "./CommitFields";
 import type { CMToken } from "./tokens";
 import type { InitiativeSettings } from "./SceneState";
 
@@ -26,6 +28,7 @@ type Props = {
     tokens: CMToken[];
     colSpan?: number;
     showHealthColumn?: boolean;
+    updateRow?: (id: string, patch: Partial<InitiativeItem>) => void;
 };
 
 export default function PlayerRow({
@@ -35,6 +38,7 @@ export default function PlayerRow({
     tokens,
     colSpan,
     showHealthColumn,
+    updateRow,
 }: Props) {
     const [open, setOpen] = useState(false);
     const [avatarUrl, setAvatarUrl] = useState<string | undefined>(tokenUrl);
@@ -44,6 +48,29 @@ export default function PlayerRow({
     const { getHealthInfo } = useHealthLogic(settings);
     const distances = useDistances(row.id, tokens, settings.showDistances);
     const healthInfo = getHealthInfo(row);
+
+    // Health editing hook
+    const onChange = (patch: Partial<InitiativeItem>) => {
+        updateRow?.(row.id, patch);
+    };
+    const {
+        editingField,
+        setEditingField,
+        commitCurrentHP,
+        commitTempHP,
+    } = useHPEditing(row, false, onChange); // false = not started check (players always edit same way)
+
+    // Styling for input fields to match DM view
+    const inputSx = {
+        "& .MuiOutlinedInput-root": { borderRadius: 0.25, height: 28, p: 0 },
+        "& .MuiOutlinedInput-input": { fontSize: "0.8rem", lineHeight: 1.25, py: 0 },
+    };
+
+    const hpTextSx = {
+        fontSize: "0.8rem",
+        fontWeight: 600,
+        lineHeight: 1.25
+    };
 
     // Auto-expand/collapse logic for player characters
     useEffect(() => {
@@ -171,23 +198,144 @@ export default function PlayerRow({
 
                 {/* Name */}
                 <TableCell>
-                    <Typography
-                        noWrap
-                        sx={{
-                            fontWeight: isActive ? 700 : 600,
-                            fontSize: isActive ? "0.95rem" : "0.85rem",
-                            minWidth: 0,
-                        }}
-                    >
-                        {row.visible ? row.name : <em>Hidden</em>}
-                    </Typography>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>
+                        <Typography
+                            noWrap
+                            sx={{
+                                fontWeight: isActive ? 700 : 600,
+                                fontSize: isActive ? "0.95rem" : "0.85rem",
+                                minWidth: 0,
+                            }}
+                        >
+                            {row.visible ? row.name : <em>Hidden</em>}
+                        </Typography>
+                        {row.concentrating && (
+                            <Box
+                                sx={{
+                                    width: 14,
+                                    height: 14,
+                                    bgcolor: "grey.600",
+                                    transform: "rotate(45deg)",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    flexShrink: 0,
+                                }}
+                            >
+                                <Typography
+                                    sx={{
+                                        fontSize: "0.55rem",
+                                        fontWeight: 700,
+                                        color: "white",
+                                        transform: "rotate(-45deg)",
+                                        lineHeight: 1,
+                                    }}
+                                >
+                                    C
+                                </Typography>
+                            </Box>
+                        )}
+                    </Box>
                 </TableCell>
 
                 {/* Health */}
                 {computedShowHealthColumn && (
-                    <TableCell width={62} align="center">
-                        <HealthDisplay row={row} healthInfo={healthInfo} variant="compact" />
+                    <TableCell width={62} align="center" onClick={(e) => e.stopPropagation()} sx={{ cursor: "default" }}>
+                        {settings.playerEditableHealth && row.playerCharacter && healthInfo.mode === "numbers" ? (
+                            <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, height: 28 }}>
+                                {/* CURRENT */}
+                                {editingField === "cur" ? (
+                                    <CommitNumberField
+                                        size="small"
+                                        variant="outlined"
+                                        value={row.currentHP}
+                                        allowMath
+                                        min={0}
+                                        max={Math.max(0, row.maxHP)}
+                                        onCommit={commitCurrentHP}
+                                        sx={inputSx}
+                                        slotProps={{
+                                            htmlInput: {
+                                                inputMode: "text",
+                                                pattern: undefined,
+                                                autoFocus: true,
+                                                onFocus: (e: any) => e.currentTarget.select(),
+                                                "aria-label": "current hp",
+                                                style: { textAlign: "center", padding: "0 1px", fontSize: "0.8rem", width: 34 },
+                                            },
+                                        }}
+                                    />
+                                ) : (
+                                    <Typography
+                                        component="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setEditingField("cur");
+                                        }}
+                                        style={{ all: "unset", cursor: "text" }}
+                                    >
+                                        <Typography component="span" sx={hpTextSx}>
+                                            {row.currentHP}
+                                        </Typography>
+                                    </Typography>
+                                )}
+
+                                <Typography component="span" sx={{ fontSize: "0.95rem", opacity: 0.85 }}>
+                                    /
+                                </Typography>
+
+                                {/* MAX (read-only for players) */}
+                                <Typography component="span" sx={hpTextSx}>
+                                    {row.maxHP}
+                                </Typography>
+                            </Box>
+                        ) : (
+                            <HealthDisplay row={row} healthInfo={healthInfo} variant="compact" />
+                        )}
                     </TableCell>
+                )}
+
+                {/* TEMP HP - separate column, always shown when editable */}
+                {computedShowHealthColumn && (
+                    settings.playerEditableHealth && row.playerCharacter && healthInfo.mode === "numbers" ? (
+                        <TableCell width={36} align="center" onClick={(e) => e.stopPropagation()} sx={{ cursor: "default" }}>
+                            <Box sx={{ display: "inline-flex", alignItems: "center", justifyContent: "center", height: 28 }}>
+                                {editingField === "temp" ? (
+                                    <CommitNumberField
+                                        size="small"
+                                        variant="outlined"
+                                        value={row.tempHP}
+                                        allowMath
+                                        onCommit={commitTempHP}
+                                        sx={inputSx}
+                                        slotProps={{
+                                            htmlInput: {
+                                                inputMode: "text",
+                                                pattern: undefined,
+                                                autoFocus: true,
+                                                onFocus: (e: any) => e.currentTarget.select(),
+                                                "aria-label": "temp hp",
+                                                style: { textAlign: "center", padding: "0 1px", fontSize: "0.8rem", width: 34 },
+                                            },
+                                        }}
+                                    />
+                                ) : (
+                                    <Typography
+                                        component="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setEditingField("temp");
+                                        }}
+                                        style={{ all: "unset", cursor: "text" }}
+                                    >
+                                        <Typography component="span" sx={hpTextSx}>
+                                            {row.tempHP || 0}
+                                        </Typography>
+                                    </Typography>
+                                )}
+                            </Box>
+                        </TableCell>
+                    ) : null
                 )}
             </TableRow>
 

@@ -32,6 +32,7 @@ type RowSettings = {
     showAC: boolean;
     showHP: boolean;
     showDMR: boolean;
+    showConc: boolean;
 };
 
 type Props = {
@@ -92,6 +93,7 @@ export default function GroupRow({
         ac: settings?.showAC ?? true,
         hp: settings?.showHP ?? true,
         dmr: settings?.showDMR ?? true,
+        conc: settings?.showConc ?? false,
     }), [settings]);
 
     const handleInitiativeChange = async (newInitiative: number) => {
@@ -187,7 +189,7 @@ export default function GroupRow({
     const displayInitiative = group.initiative;
 
     // Calculate how many columns the name should span
-    const nameColSpan = 1 + (vis.ac ? 1 : 0) + (vis.hp ? 2 : 0) + (vis.dmr ? 1 : 0);
+    const nameColSpan = 1 + (vis.ac ? 1 : 0) + (vis.hp ? 2 : 0) + (vis.conc ? 1 : 0) + (vis.dmr ? 1 : 0);
 
     return (
         <>
@@ -262,7 +264,7 @@ export default function GroupRow({
                         textOverflow: "ellipsis"
                     }}
                 >
-                    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
+                    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, pr: 0.5 }}>
                         {/* Left side - Group info */}
                         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>
                             <GroupRounded sx={{ fontSize: 16, opacity: 0.8 }} />
@@ -278,7 +280,7 @@ export default function GroupRow({
                         </Box>
 
                         {/* Right side - Action buttons */}
-                        <Box sx={{ display: "flex", gap: 0.25, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                        <Box sx={{ display: "flex", gap: 0.25, flexShrink: 0, mr: -0.25 }} onClick={(e) => e.stopPropagation()}>
                             {/* Initiative Staging Toggle Button */}
                             <Tooltip
                                 title={staged ? "Activate group in initiative" : "Stage group (remove from active initiative)"}

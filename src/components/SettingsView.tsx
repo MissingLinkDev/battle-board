@@ -427,6 +427,18 @@ export default function SettingsView({ value, onChange, onBack, rows, ready = tr
                                 />
                                 <Divider />
                                 <RowShell
+                                    title="Concentration"
+                                    description="Show concentration tracking."
+                                    right={
+                                        <Toggle
+                                            checked={!!value.showConcentration}
+                                            onChange={(next) => set({ showConcentration: next })}
+                                            aria-label="toggle-concentration"
+                                        />
+                                    }
+                                />
+                                <Divider />
+                                <RowShell
                                     title="Range Ring Toggle"
                                     description="Show DM ring button."
                                     right={
@@ -501,6 +513,18 @@ export default function SettingsView({ value, onChange, onBack, rows, ready = tr
                                                     <HealthModeSelect
                                                         value={npcHealthMode}
                                                         onChange={(next) => set({ npcHealthMode: next } as any)}
+                                                    />
+                                                }
+                                            />
+                                            <RowShell
+                                                dense
+                                                title="Editable Health"
+                                                description="Players can edit health for player characters."
+                                                right={
+                                                    <Toggle
+                                                        checked={!!value.playerEditableHealth}
+                                                        onChange={(next) => set({ playerEditableHealth: next })}
+                                                        aria-label="toggle-player-editable-health"
                                                     />
                                                 }
                                             />

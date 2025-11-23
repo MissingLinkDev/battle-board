@@ -44,6 +44,9 @@ export type MetaShape = {
     // NEW: Single group ID instead of array
     groupId?: string | null;
 
+    // Concentration tracking
+    concentrating?: boolean;
+
     // DEPRECATED: Keep for migration
     encounterGroups?: string[];
 };
@@ -104,6 +107,7 @@ export const DEFAULT_META: Omit<MetaShape, "name" | "visible"> = {
     dmPreview: false,
     inInitiative: true,
     groupId: null, // changed from encounterGroups: []
+    concentrating: false,
 };
 
 /** Create initial meta from an Item snapshot + defaults. */

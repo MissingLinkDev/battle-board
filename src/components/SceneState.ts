@@ -40,6 +40,10 @@ export type InitiativeSettings = {
     npcHealthMode?: HealthMode;
     /** NEW: Group staging visibility control - default to true (enabled) */
     groupStagingControlsVisibility?: boolean;
+    /** NEW: Allow players to edit health for their player characters */
+    playerEditableHealth?: boolean;
+    /** Show concentration tracking column in DM view */
+    showConcentration?: boolean;
 };
 
 export type SceneState = {
@@ -72,6 +76,10 @@ export const DEFAULT_SETTINGS: InitiativeSettings = {
     npcHealthMode: "status",
     // Group staging visibility control - default to true (enabled)
     groupStagingControlsVisibility: true,
+    // Player editable health - default to false (disabled)
+    playerEditableHealth: false,
+    // Concentration tracking - default to false (disabled)
+    showConcentration: false,
 };
 
 const DEFAULT_SCENE_STATE: SceneState = {

@@ -1,6 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
+import Alert from "@mui/material/Alert";
+import IconButton from "@mui/material/IconButton";
+import CloseRounded from "@mui/icons-material/CloseRounded";
+import Stack from "@mui/material/Stack";
 
 import PlayerTable from "./PlayerTable";
 import SettingsView from "./SettingsView";
@@ -14,6 +18,7 @@ import { removeFromInitiative as removeAction } from "../actions/removeFromIniti
 import { useAddAll } from "../actions/useAddAll";
 import { registerInitiativeContextMenu } from "./initiativeMenu";
 import { useGlobalRingCleanup } from "../hooks/useRingsManager";
+import { useConcentrationNotifications } from "../hooks/useConcentrationNotifications";
 
 export function InitiativeTracker() {
     const role = useRole();
@@ -44,6 +49,7 @@ export function InitiativeTracker() {
 
     useGlobalRingCleanup(started, ready);
     const { showHealthColumn } = useHealthLogic(settings);
+    const { checks, dismiss } = useConcentrationNotifications();
 
     // Readiness management
     const rafsRef = useRef<number[]>([]);
@@ -82,8 +88,50 @@ export function InitiativeTracker() {
     return (
         <Box
             ref={rootRef}
-            sx={{ display: "flex", flexDirection: "column", height: "100%", minWidth: 0, minHeight: 200 }}
+            sx={{ display: "flex", flexDirection: "column", height: "100%", minWidth: 0, minHeight: 200, position: "relative" }}
         >
+            {/* Concentration Check Notifications - Absolutely positioned overlay */}
+            {checks.length > 0 && (
+                <Stack
+                    spacing={0.5}
+                    sx={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        p: 0.5,
+                        zIndex: 1000,
+                        pointerEvents: "none"
+                    }}
+                >
+                    {checks.map((check) => (
+                        <Alert
+                            key={check.tokenId}
+                            severity="warning"
+                            sx={{
+                                py: 0.5,
+                                pointerEvents: "auto",
+                                boxShadow: 2
+                            }}
+                            action={
+                                <IconButton
+                                    aria-label="close"
+                                    color="inherit"
+                                    size="small"
+                                    onClick={() => dismiss(check.tokenId)}
+                                >
+                                    <CloseRounded fontSize="small" />
+                                </IconButton>
+                            }
+                        >
+                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                {check.tokenName} Concentration Check, DC {check.dc}
+                            </Typography>
+                        </Alert>
+                    ))}
+                </Stack>
+            )}
+
             {/* Tracker View */}
             <Box
                 sx={{
@@ -159,6 +207,7 @@ export function InitiativeTracker() {
                             settings={settings}
                             tokens={initiativeTokens}
                             showHealthColumn={showHealthColumn}
+                            updateRow={updateRow}
                         />
                     )
                 )}

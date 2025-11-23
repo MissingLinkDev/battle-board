@@ -16,15 +16,19 @@ type PlayerTableProps = {
     settings: InitiativeSettings;
     tokens: CMToken[];
     showHealthColumn?: boolean; // Optional override
+    updateRow?: (id: string, patch: Partial<InitiativeItem>) => void;
 };
 
 export default function PlayerTable({
     items,
     settings,
     tokens,
-    showHealthColumn
+    showHealthColumn,
+    updateRow
 }: PlayerTableProps) {
-    const colCount = 4 + (showHealthColumn ? 1 : 0);
+    // Calculate column count: base (4) + health (1) + temp HP (1 if editable)
+    const hasEditableHealth = settings.playerEditableHealth && items.some(item => item.playerCharacter);
+    const colCount = 4 + (showHealthColumn ? 1 : 0) + (showHealthColumn && hasEditableHealth ? 1 : 0);
 
     // Memoize the initiative token IDs to avoid unnecessary recalculations
     const initiativeTokenIds = useMemo(() =>
@@ -68,6 +72,7 @@ export default function PlayerTable({
                         <TableCell width={60} align="center"></TableCell>
                         <TableCell align="center">NAME</TableCell>
                         {showHealthColumn && <TableCell width={62} align="center">HEALTH</TableCell>}
+                        {showHealthColumn && hasEditableHealth && <TableCell width={36} align="center">TEMP</TableCell>}
                     </TableRow>
                 </TableHead>
 
@@ -85,6 +90,7 @@ export default function PlayerTable({
                                 tokens={filteredTokens}
                                 colSpan={colCount}
                                 showHealthColumn={showHealthColumn}
+                                updateRow={updateRow}
                             />
                         );
                     })}

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { InitiativeItem } from "../components/InitiativeItem";
+import OBR from "@owlbear-rodeo/sdk";
 
 export function useHPEditing(
     row: InitiativeItem,
@@ -28,9 +29,31 @@ export function useHPEditing(
                 tempHP: row.tempHP - tempHPAbsorbed,
                 currentHP: Math.max(0, newCurrentHP)
             });
+
+            // Check for concentration
+            if (damage > 0 && row.concentrating) {
+                const dc = Math.max(10, Math.floor(damage / 2));
+                OBR.broadcast.sendMessage("com.battleboard.concentration", {
+                    type: "CHECK_NEEDED",
+                    tokenId: row.id,
+                    tokenName: row.name,
+                    dc
+                }, { destination: "ALL" });
+            }
         } else {
             // No damage, or no temp HP, or healing
             onChange({ currentHP: clampedVal });
+
+            // Check for concentration if taking damage
+            if (damage > 0 && row.concentrating) {
+                const dc = Math.max(10, Math.floor(damage / 2));
+                OBR.broadcast.sendMessage("com.battleboard.concentration", {
+                    type: "CHECK_NEEDED",
+                    tokenId: row.id,
+                    tokenName: row.name,
+                    dc
+                }, { destination: "ALL" });
+            }
         }
         setEditingField(null);
     };

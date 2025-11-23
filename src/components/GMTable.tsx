@@ -86,8 +86,9 @@ export default function GmTable({
     const showAC = settings.showArmor;
     const showHP = settings.showHP;
     const showDMR = settings.dmRingToggle;
+    const showConc = settings.showConcentration ?? false;
 
-    const gmColCount = 3 + (showAC ? 1 : 0) + (showHP ? 2 : 0) + (showDMR ? 1 : 0);
+    const gmColCount = 3 + (showAC ? 1 : 0) + (showHP ? 2 : 0) + (showConc ? 1 : 0) + (showDMR ? 1 : 0);
 
     const getActiveIndex = (renderItems: RenderItem[]) => {
         return renderItems.findIndex((item) => {
@@ -211,6 +212,34 @@ export default function GmTable({
                             {showAC && <TableCell width={36} align="center">AC</TableCell>}
                             {showHP && <TableCell width={62} align="center">HP</TableCell>}
                             {showHP && <TableCell width={36} align="center">TP</TableCell>}
+                            {showConc && (
+                                <TableCell width={28} align="center">
+                                    <Box
+                                        sx={{
+                                            width: 14,
+                                            height: 14,
+                                            bgcolor: "grey.600",
+                                            transform: "rotate(45deg)",
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            mx: "auto",
+                                        }}
+                                    >
+                                        <Typography
+                                            sx={{
+                                                fontSize: "0.55rem",
+                                                fontWeight: 700,
+                                                color: "white",
+                                                transform: "rotate(-45deg)",
+                                                lineHeight: 1,
+                                            }}
+                                        >
+                                            C
+                                        </Typography>
+                                    </Box>
+                                </TableCell>
+                            )}
                             {showDMR && <TableCell width={24}></TableCell>}
                         </TableRow>
                     </TableHead>
@@ -240,6 +269,7 @@ export default function GmTable({
                                         showAC,
                                         showHP,
                                         showDMR,
+                                        showConc,
                                     }}
                                     globalSettings={globalSettings}
                                     started={started}
@@ -277,6 +307,7 @@ export default function GmTable({
                                         showAC,
                                         showHP,
                                         showDMR,
+                                        showConc,
                                     }}
                                     globalSettings={globalSettings}
                                     started={started}
@@ -467,6 +498,7 @@ export default function GmTable({
                             {showAC && <col style={{ width: "36px" }} />}
                             {showHP && <col style={{ width: "62px" }} />}
                             {showHP && <col style={{ width: "36px" }} />}
+                            {showConc && <col style={{ width: "28px" }} />}
                             {showDMR && <col style={{ width: "24px" }} />}
                         </colgroup>
                         <TableBody>
@@ -492,6 +524,7 @@ export default function GmTable({
                                                 showAC,
                                                 showHP,
                                                 showDMR,
+                                                showConc,
                                             }}
                                             globalSettings={globalSettings}
                                             started={started}
