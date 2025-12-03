@@ -72,27 +72,10 @@ async function calculateLabelPosition(token: Item): Promise<Vector2> {
     const dpi = token.grid?.dpi ?? grid.dpi;
     const baseCellsH = (token.image?.height ?? dpi) / dpi;
     const scaleY = Math.abs(token.scale?.y ?? 1);
-    const tokenHeightPx = baseCellsH * scaleY * dpi;
-
-    console.log("Label position calculation:", {
-        tokenId: token.id,
-        tokenName: token.name,
-        centerY: center.y,
-        imageHeight: token.image?.height,
-        dpi: dpi,
-        baseCellsH: baseCellsH,
-        scaleY: scaleY,
-        tokenHeightPx: tokenHeightPx,
-        gridDpi: grid.dpi,
-        gridUnitsPerCell: grid.unitsPerCell
-    });
 
     // Position label: move up by half token height + half label height
     const labelY = center.y - (grid.dpi / 2 * baseCellsH * scaleY) + (LABEL_HEIGHT_ESTIMATE);
     const labelX = center.x;
-
-    console.log("Final label position:", { labelX, labelY, offset: (grid.dpi / 4 * baseCellsH * scaleY) + (LABEL_HEIGHT_ESTIMATE / 2) });
-
     return { x: labelX, y: labelY };
 }
 
