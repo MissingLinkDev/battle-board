@@ -96,11 +96,8 @@ export function registerInitiativeContextMenu() {
             },
         ],
         embed: {
-            url: "/elevation-embed.html",
+            url: "/elevation.html",
             height: 56,
-        },
-        onClick() {
-            // The embed will handle the interaction
         },
     });
 
