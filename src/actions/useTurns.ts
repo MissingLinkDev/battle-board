@@ -44,6 +44,7 @@ async function getCurrentInitiativeState(): Promise<{
                 tempHP: meta.tempHP || 0,
                 movement: meta.movement || 30,
                 attackRange: meta.attackRange || 60,
+                elevation: meta.elevation || 0,
                 playerCharacter: meta.playerCharacter || false,
                 groupId: meta.groupId || null,
                 movementColor: meta.movementColor,

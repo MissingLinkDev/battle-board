@@ -105,29 +105,52 @@ export function closestPointsOnAABBsPx(
 export type TokenDistanceMode = "box" | "center";
 
 /**
- * Distance between two CM tokens in scene units (e.g., feet), using Owlbear’s
+ * Distance between two CM tokens in scene units (e.g., feet), using Owlbear's
  * current measurement style (Chebyshev/Alternating/Manhattan/Euclidean) and scale.
  * - mode="box": nearest edge-to-edge of the token squares (recommended).
  * - mode="center": center-to-center.
+ *
+ * @param a First token
+ * @param b Second token
+ * @param mode Distance mode (box or center)
+ * @param elevationA Optional elevation of first token in scene units
+ * @param elevationB Optional elevation of second token in scene units
  */
 export async function obrDistanceBetweenTokensUnits(
     a: CMToken,
     b: CMToken,
-    mode: TokenDistanceMode = "box"
+    mode: TokenDistanceMode = "box",
+    elevationA: number = 0,
+    elevationB: number = 0
 ): Promise<number> {
+    let horizontalDistance: number;
+
     if (mode === "center") {
-        return OBR.scene.grid.getDistance(
+        horizontalDistance = await OBR.scene.grid.getDistance(
             { x: a.position.x, y: a.position.y },
             { x: b.position.x, y: b.position.y }
         );
+    } else {
+        const grid = await getGridInfo();
+        const ra = tokenToBoxPx(a, grid);
+        const rb = tokenToBoxPx(b, grid);
+        const { aPx, bPx } = closestPointsOnAABBsPx(ra, rb);
+        const cells = await OBR.scene.grid.getDistance(aPx, bPx);
+        horizontalDistance = cells * grid.unitsPerCell;
     }
 
-    const grid = await getGridInfo();
-    const ra = tokenToBoxPx(a, grid);
-    const rb = tokenToBoxPx(b, grid);
-    const { aPx, bPx } = closestPointsOnAABBsPx(ra, rb);
-    const cells = await OBR.scene.grid.getDistance(aPx, bPx);
-    return cells * grid.unitsPerCell;
+    // Calculate elevation difference
+    const elevationDiff = Math.abs(elevationA - elevationB);
+
+    // If there's no elevation difference, return horizontal distance
+    if (elevationDiff === 0) {
+        return horizontalDistance;
+    }
+
+    // Calculate 3D distance using Pythagorean theorem
+    // This respects the grid's distance measurement style for horizontal distance
+    // and adds vertical distance component
+    return Math.sqrt(horizontalDistance * horizontalDistance + elevationDiff * elevationDiff);
 }
 
 /** Convenience wrapper for arbitrary pixel points. Returns scene units. */

@@ -1,5 +1,6 @@
+import React from "react";
+import { useEffect, useState } from "react";
 import OBR from "@owlbear-rodeo/sdk";
-import React, { useEffect, useState } from "react";
 
 /**
  * Only render the children when we're within a plugin

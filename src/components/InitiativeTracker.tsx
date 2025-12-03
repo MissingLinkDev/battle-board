@@ -19,6 +19,7 @@ import { useAddAll } from "../actions/useAddAll";
 import { registerInitiativeContextMenu } from "./initiativeMenu";
 import { useGlobalRingCleanup } from "../hooks/useRingsManager";
 import { useConcentrationNotifications } from "../hooks/useConcentrationNotifications";
+import { useElevationLabels } from "../hooks/useElevationLabels";
 
 export function InitiativeTracker() {
     const role = useRole();
@@ -48,6 +49,7 @@ export function InitiativeTracker() {
     } = useInitiativeState();
 
     useGlobalRingCleanup(started, ready);
+    useElevationLabels(ready);
     const { showHealthColumn } = useHealthLogic(settings);
     const { checks, dismiss } = useConcentrationNotifications();
 

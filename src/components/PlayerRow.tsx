@@ -26,6 +26,7 @@ type Props = {
     tokenUrl?: string;
     settings: InitiativeSettings;
     tokens: CMToken[];
+    items?: InitiativeItem[];
     colSpan?: number;
     showHealthColumn?: boolean;
     updateRow?: (id: string, patch: Partial<InitiativeItem>) => void;
@@ -36,6 +37,7 @@ export default function PlayerRow({
     tokenUrl,
     settings,
     tokens,
+    items,
     colSpan,
     showHealthColumn,
     updateRow,
@@ -46,7 +48,7 @@ export default function PlayerRow({
 
     // Centralized hooks
     const { getHealthInfo } = useHealthLogic(settings);
-    const distances = useDistances(row.id, tokens, settings.showDistances);
+    const distances = useDistances(row.id, tokens, settings.showDistances, "box", items);
     const healthInfo = getHealthInfo(row);
 
     // Health editing hook

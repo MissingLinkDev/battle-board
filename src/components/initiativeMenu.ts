@@ -3,6 +3,7 @@ import { META_KEY, createMetaForItem } from "./metadata";
 
 export function registerInitiativeContextMenu() {
     const id = META_KEY + "/menu";
+    const elevationId = META_KEY + "/elevation-menu";
 
     OBR.contextMenu.create({
         id,
@@ -71,6 +72,35 @@ export function registerInitiativeContextMenu() {
                     }
                 });
             })();
+        },
+    });
+
+    // Create elevation context menu item
+    OBR.contextMenu.create({
+        id: elevationId,
+        icons: [
+            {
+                icon: "/elevation.svg",
+                label: "Set Elevation",
+                filter: {
+                    every: [
+                        { key: "layer", value: "CHARACTER", coordinator: "||" },
+                        { key: "layer", value: "MOUNT" },
+                        { key: "type", value: "IMAGE" },
+                        // Must have metadata (in initiative)
+                        { key: ["metadata", META_KEY], value: undefined, operator: "!=" },
+                    ],
+                    permissions: ["UPDATE"],
+                    roles: ["GM"],
+                },
+            },
+        ],
+        embed: {
+            url: "/elevation-embed.html",
+            height: 56,
+        },
+        onClick() {
+            // The embed will handle the interaction
         },
     });
 

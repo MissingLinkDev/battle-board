@@ -20,6 +20,7 @@ export type MetaShape = {
     // movement & tactics
     movement: number;     // e.g., feet per round
     attackRange: number;  // e.g., feet
+    elevation: number;    // e.g., feet above ground
 
     // player flag
     playerCharacter: boolean;
@@ -70,6 +71,7 @@ export function isMetadata(v: unknown): v is MetaShape {
         typeof o.tempHP === "number" &&
         typeof o.movement === "number" &&
         typeof o.attackRange === "number" &&
+        typeof o.elevation === "number" &&
         typeof o.playerCharacter === "boolean"
     );
 }
@@ -88,6 +90,7 @@ export const DEFAULT_META: Omit<MetaShape, "name" | "visible"> = {
     // tactics
     movement: 30,
     attackRange: 60,
+    elevation: 0,
 
     playerCharacter: false,
 

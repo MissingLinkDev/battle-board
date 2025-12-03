@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import type { CMToken } from "../components/tokens";
+import type { InitiativeItem } from "../components/InitiativeItem";
 import { formatFeet, formatDistanceLabel, obrDistanceBetweenTokensUnits, getCachedGridUnits, type TokenDistanceMode } from "../components/utils";
 
 export type DistanceInfo = {
@@ -11,12 +12,14 @@ export type DistanceInfo = {
 
 /**
  * Centralized distance calculation hook - optimized for position changes
+ * Now includes elevation in distance calculations
  */
 export function useDistances(
     tokenId: string,
     tokens: CMToken[],
     enabled: boolean = true,
-    mode: TokenDistanceMode = "box"
+    mode: TokenDistanceMode = "box",
+    items?: InitiativeItem[]
 ) {
     const [distances, setDistances] = useState<DistanceInfo[]>([]);
     const { unitLabel, unitsPerCell } = getCachedGridUnits();
@@ -34,17 +37,26 @@ export function useDistances(
         [tokens, tokenId]
     );
 
-    // Create a signature of current positions for change detection
+    // Create elevation lookup map from items
+    const elevationMap = useMemo(() => {
+        if (!items) return new Map<string, number>();
+        return new Map(items.map(item => [item.id, item.elevation ?? 0]));
+    }, [items]);
+
+    // Create a signature of current positions and elevations for change detection
     const positionSignature = useMemo(() => {
         if (!targetToken || otherTokens.length === 0) return '';
 
         const positions = [targetToken, ...otherTokens]
-            .map(t => `${t.id}:${t.position.x},${t.position.y}`)
+            .map(t => {
+                const elevation = elevationMap.get(t.id) ?? 0;
+                return `${t.id}:${t.position.x},${t.position.y}:${elevation}`;
+            })
             .sort()
             .join('|');
 
         return `${tokenId}:${mode}:${positions}`;
-    }, [targetToken, otherTokens, tokenId, mode]);
+    }, [targetToken, otherTokens, tokenId, mode, elevationMap]);
 
     useEffect(() => {
         let cancelled = false;
@@ -62,9 +74,18 @@ export function useDistances(
             }
 
             try {
+                const targetElevation = elevationMap.get(tokenId) ?? 0;
+
                 const calculations = await Promise.all(
                     otherTokens.map(async (token) => {
-                        const raw = await obrDistanceBetweenTokensUnits(targetToken, token, mode);
+                        const tokenElevation = elevationMap.get(token.id) ?? 0;
+                        const raw = await obrDistanceBetweenTokensUnits(
+                            targetToken,
+                            token,
+                            mode,
+                            targetElevation,
+                            tokenElevation
+                        );
                         return {
                             id: token.id,
                             name: token.name || "(unnamed)",
@@ -95,7 +116,7 @@ export function useDistances(
         return () => {
             cancelled = true;
         };
-    }, [positionSignature, enabled, unitLabel, unitsPerCell, targetToken, otherTokens, tokenId, mode]);
+    }, [positionSignature, enabled, unitLabel, unitsPerCell, targetToken, otherTokens, tokenId, mode, elevationMap]);
 
     return distances;
 }

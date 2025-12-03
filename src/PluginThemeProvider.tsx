@@ -1,6 +1,6 @@
 import { type Theme as MuiTheme, createTheme, ThemeProvider } from "@mui/material/styles";
 import OBR, { type Theme } from "@owlbear-rodeo/sdk";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 /**
  * Create a MUI theme based off of the current OBR theme
@@ -35,7 +35,7 @@ function getTheme(theme?: Theme) {
 export function PluginThemeProvider({
     children,
 }: {
-    children?: React.ReactNode;
+    children?: ReactNode;
 }) {
     const [theme, setTheme] = useState<MuiTheme>(() => getTheme());
     useEffect(() => {

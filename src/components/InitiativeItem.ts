@@ -13,6 +13,7 @@ export type InitiativeItem = {
     tempHP: number;
     movement: number;
     attackRange: number;
+    elevation: number;
     playerCharacter: boolean;
 
     movementColor?: string | null;
@@ -69,6 +70,7 @@ export function initiativeFromItem(item: Item): InitiativeItem | null {
         tempHP: meta.tempHP,
         movement: meta.movement,
         attackRange: meta.attackRange,
+        elevation: meta.elevation,
         playerCharacter: meta.playerCharacter,
 
         movementColor: meta.movementColor ?? null,
@@ -109,6 +111,7 @@ export function metaPatchFromRowDiff(before: InitiativeItem, after: InitiativeIt
     assign("tempHP");
     assign("movement");
     assign("attackRange");
+    assign("elevation");
     assign("active");
     assign("visible");
     assign("playerCharacter");
