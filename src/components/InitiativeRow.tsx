@@ -90,7 +90,7 @@ export default function InitiativeRow({
     const dmPreview = !!row.dmPreview;
 
     // Centralized hooks
-    const distances = useDistances(row.id, tokens, settings?.showDistances, "box", items);
+    const distances = useDistances(row.id, tokens, settings?.showDistances, "box", items, globalSettings.roundDistances);
     const { config } = useRingState(row);
 
     // Ring management with centralized logic

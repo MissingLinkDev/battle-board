@@ -19,7 +19,8 @@ export function useDistances(
     tokens: CMToken[],
     enabled: boolean = true,
     mode: TokenDistanceMode = "box",
-    items?: InitiativeItem[]
+    items?: InitiativeItem[],
+    roundDistances: boolean = true
 ) {
     const [distances, setDistances] = useState<DistanceInfo[]>([]);
     const { unitLabel, unitsPerCell } = getCachedGridUnits();
@@ -89,8 +90,8 @@ export function useDistances(
                         return {
                             id: token.id,
                             name: token.name || "(unnamed)",
-                            ft: formatFeet(raw),
-                            text: formatDistanceLabel(raw, unitLabel, unitsPerCell),
+                            ft: formatFeet(raw, roundDistances, unitsPerCell),
+                            text: formatDistanceLabel(raw, unitLabel, unitsPerCell, roundDistances, unitsPerCell),
                         };
                     })
                 );
@@ -116,7 +117,7 @@ export function useDistances(
         return () => {
             cancelled = true;
         };
-    }, [positionSignature, enabled, unitLabel, unitsPerCell, targetToken, otherTokens, tokenId, mode, elevationMap]);
+    }, [positionSignature, enabled, unitLabel, unitsPerCell, targetToken, otherTokens, tokenId, mode, elevationMap, roundDistances]);
 
     return distances;
 }

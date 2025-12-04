@@ -48,7 +48,7 @@ export default function PlayerRow({
 
     // Centralized hooks
     const { getHealthInfo } = useHealthLogic(settings);
-    const distances = useDistances(row.id, tokens, settings.showDistances, "box", items);
+    const distances = useDistances(row.id, tokens, settings.showDistances, "box", items, settings.roundDistances);
     const healthInfo = getHealthInfo(row);
 
     // Health editing hook
