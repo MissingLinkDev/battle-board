@@ -20,7 +20,8 @@ export function useDistances(
     tokens: CMToken[],
     enabled: boolean = true,
     mode: TokenDistanceMode = "box",
-    items?: InitiativeItem[]
+    items?: InitiativeItem[],
+    roundDistances: boolean = false
 ) {
     const [distances, setDistances] = useState<DistanceInfo[]>([]);
     const [gridVersion, setGridVersion] = useState(0);
@@ -101,8 +102,8 @@ export function useDistances(
                         return {
                             id: token.id,
                             name: token.name || "(unnamed)",
-                            ft: formatFeet(raw),
-                            text: formatDistanceLabel(raw, unitLabel, unitsPerCell),
+                            ft: formatFeet(raw, roundDistances, unitsPerCell),
+                            text: formatDistanceLabel(raw, unitLabel, unitsPerCell, roundDistances, unitsPerCell),
                         };
                     })
                 );
@@ -129,7 +130,7 @@ export function useDistances(
         return () => {
             cancelled = true;
         };
-    }, [positionSignature, enabled, unitLabel, unitsPerCell, targetToken, otherTokens, tokenId, mode, elevationMap, gridVersion]);
+    }, [positionSignature, enabled, unitLabel, unitsPerCell, targetToken, otherTokens, tokenId, mode, elevationMap, gridVersion, roundDistances]);
 
     return distances;
 }

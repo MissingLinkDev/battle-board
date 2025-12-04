@@ -42,8 +42,10 @@ export type MetaShape = {
     dmPreview?: boolean;
     inInitiative?: boolean;
 
-    // NEW: Single group ID instead of array
-    groupId?: string | null;
+    // Token-based grouping: each token stores its own group properties
+    groupId?: string | null;        // Unique ID for the group this token belongs to
+    groupName?: string | null;      // Display name of the group (synced across members)
+    groupStaged?: boolean;          // Whether this group is staged (not in active initiative)
 
     // Concentration tracking
     concentrating?: boolean;
@@ -109,7 +111,9 @@ export const DEFAULT_META: Omit<MetaShape, "name" | "visible"> = {
 
     dmPreview: false,
     inInitiative: true,
-    groupId: null, // changed from encounterGroups: []
+    groupId: null,
+    groupName: null,
+    groupStaged: false,
     concentrating: false,
 };
 
@@ -176,27 +180,39 @@ export function batchUpdateMeta(
     });
 }
 
-// ========== GROUP MANAGEMENT FUNCTIONS ==========
+// ========== TOKEN-BASED GROUP MANAGEMENT FUNCTIONS ==========
 
-/** Add a token to a group and sync its initiative with the group */
-export async function addTokenToGroup(OBR: any, id: string, groupId: string) {
-    // First, get the group's current initiative
-    const { getGroups } = await import("./SceneState");
-    const groups = await getGroups();
-    const group = groups.find(g => g.id === groupId);
-    const groupInitiative = group?.initiative ?? 0;
+/**
+ * Add a token to a group (token-based approach).
+ * If the group doesn't exist yet, this token becomes the first member.
+ */
+export async function addTokenToGroup(
+    OBR: any,
+    tokenId: string,
+    groupId: string,
+    groupName?: string,
+    groupInitiative?: number
+) {
+    // Check if group already exists by finding other members
+    const allItems = await OBR.scene.items.getItems();
+    const existingGroup = deriveGroupsFromItems(allItems).find(g => g.id === groupId);
 
-    return OBR.scene.items.updateItems([id], (items: Item[]) => {
+    // Use existing group properties or provided defaults
+    const finalGroupName = groupName ?? existingGroup?.name ?? "New Group";
+    const finalGroupInitiative = groupInitiative ?? existingGroup?.initiative ?? 0;
+    const finalGroupStaged = existingGroup?.staged ?? false;
+
+    return OBR.scene.items.updateItems([tokenId], (items: Item[]) => {
         const it = items[0];
         const hadMeta = !!(it.metadata as any)[META_KEY];
         const meta = (hadMeta ? (it.metadata as any)[META_KEY] : createMetaForItem(it)) as MetaShape;
         if (!hadMeta) meta.inInitiative = false;
 
-        // Set the single group ID
+        // Set group properties
         meta.groupId = groupId;
-
-        // Sync initiative with the group
-        meta.initiative = groupInitiative;
+        meta.groupName = finalGroupName;
+        meta.groupStaged = finalGroupStaged;
+        meta.initiative = finalGroupInitiative;
 
         // Clean up legacy encounterGroups if present
         if (meta.encounterGroups) {
@@ -207,12 +223,16 @@ export async function addTokenToGroup(OBR: any, id: string, groupId: string) {
     });
 }
 
-/** Remove a token from its group. */
+/** Remove a token from its group (clears all group properties). */
 export function removeTokenFromGroup(OBR: any, id: string) {
     return OBR.scene.items.updateItems([id], (items: Item[]) => {
         const it = items[0];
         const meta = ((it.metadata as any)[META_KEY] ?? createMetaForItem(it)) as MetaShape;
+
+        // Clear all group-related properties
         meta.groupId = null;
+        meta.groupName = null;
+        meta.groupStaged = false;
 
         // Clean up legacy encounterGroups if present
         if (meta.encounterGroups) {
@@ -240,7 +260,10 @@ export function getTokenGroupId(item: Item): string | null {
     return meta?.groupId ?? null;
 }
 
-/** Update all tokens in a group to match the group's initiative */
+/**
+ * Update initiative for all tokens in a group.
+ * This syncs the group's initiative value across all members.
+ */
 export async function syncGroupTokensInitiative(OBR: any, groupId: string, groupInitiative: number) {
     const tokenIds = await getTokensInGroup(OBR, groupId);
 
@@ -251,8 +274,107 @@ export async function syncGroupTokensInitiative(OBR: any, groupId: string, group
         patch: {
             // Give each member a slightly different initiative for stable sorting
             // Group members will be ordered by their index in the group
-            initiative: groupInitiative + (index * 0.1)
+            initiative: groupInitiative + (index * 0.01)
         }
+    }));
+
+    await batchUpdateMeta(OBR, patches);
+}
+
+/**
+ * Update group name for all tokens in a group.
+ * This syncs the group's name across all members.
+ */
+export async function updateGroupName(OBR: any, groupId: string, groupName: string) {
+    const tokenIds = await getTokensInGroup(OBR, groupId);
+
+    if (tokenIds.length === 0) return;
+
+    const patches = tokenIds.map(id => ({
+        id,
+        patch: { groupName }
+    }));
+
+    await batchUpdateMeta(OBR, patches);
+}
+
+/**
+ * Update staged status for all tokens in a group.
+ * This syncs the group's staged status across all members.
+ */
+export async function updateGroupStaged(OBR: any, groupId: string, staged: boolean) {
+    const tokenIds = await getTokensInGroup(OBR, groupId);
+
+    if (tokenIds.length === 0) return;
+
+    const patches = tokenIds.map(id => ({
+        id,
+        patch: { groupStaged: staged }
+    }));
+
+    await batchUpdateMeta(OBR, patches);
+}
+
+/**
+ * Update active status for all tokens in a group.
+ * Used during turn management.
+ */
+export async function updateGroupActive(OBR: any, groupId: string, active: boolean) {
+    const tokenIds = await getTokensInGroup(OBR, groupId);
+
+    if (tokenIds.length === 0) return;
+
+    const patches = tokenIds.map(id => ({
+        id,
+        patch: { active }
+    }));
+
+    await batchUpdateMeta(OBR, patches);
+}
+
+/**
+ * Create a new group by assigning tokens to it.
+ * Returns the group ID.
+ */
+export async function createGroupFromTokens(
+    OBR: any,
+    tokenIds: string[],
+    groupName: string,
+    groupInitiative: number = 0
+): Promise<string> {
+    const groupId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+    const patches = tokenIds.map((id, index) => ({
+        id,
+        patch: {
+            groupId,
+            groupName,
+            groupStaged: false,
+            initiative: groupInitiative + (index * 0.01),
+        } as Partial<MetaShape>
+    }));
+
+    await batchUpdateMeta(OBR, patches);
+
+    return groupId;
+}
+
+/**
+ * Delete a group by removing all tokens from it.
+ * This doesn't delete the tokens, just removes their group membership.
+ */
+export async function deleteGroup(OBR: any, groupId: string) {
+    const tokenIds = await getTokensInGroup(OBR, groupId);
+
+    if (tokenIds.length === 0) return;
+
+    const patches = tokenIds.map(id => ({
+        id,
+        patch: {
+            groupId: null,
+            groupName: null,
+            groupStaged: false,
+        } as Partial<MetaShape>
     }));
 
     await batchUpdateMeta(OBR, patches);
@@ -313,3 +435,84 @@ export const addTokenToEncounterGroup = addTokenToGroup;
 
 /** @deprecated Use removeTokenFromGroup instead */
 export const removeTokenFromEncounterGroup = removeTokenFromGroup;
+
+// ========== TOKEN-BASED GROUP DERIVATION ==========
+
+/** Derive Group objects from tokens (single source of truth) */
+export type DerivedGroup = {
+    id: string;              // Group ID
+    name: string;            // Group display name
+    initiative: number;      // Derived from first member's initiative
+    active: boolean;         // Whether any member is active
+    staged: boolean;         // Whether group is staged
+    memberIds: string[];     // IDs of all tokens in this group
+};
+
+/**
+ * Derive all groups from the provided items.
+ * Groups are created implicitly based on tokens sharing a groupId.
+ */
+export function deriveGroupsFromItems(items: Item[]): DerivedGroup[] {
+    const groupMap = new Map<string, {
+        id: string;
+        name: string;
+        initiative: number;
+        staged: boolean;
+        memberIds: string[];
+        activeMembers: number;
+    }>();
+
+    // Collect all tokens by their group ID
+    for (const item of items) {
+        const meta = readMeta(item);
+        if (!meta || meta.inInitiative === false) continue;
+
+        const groupId = meta.groupId;
+        if (!groupId) continue; // Not in a group
+
+        if (!groupMap.has(groupId)) {
+            // Create new group entry using this first member's properties
+            groupMap.set(groupId, {
+                id: groupId,
+                name: meta.groupName || "Unnamed Group",
+                initiative: Math.floor(meta.initiative), // Use integer part for group initiative
+                staged: meta.groupStaged ?? false,
+                memberIds: [],
+                activeMembers: 0,
+            });
+        }
+
+        const group = groupMap.get(groupId)!;
+        group.memberIds.push(item.id);
+        if (meta.active) {
+            group.activeMembers++;
+        }
+
+        // Keep the highest initiative value in the group
+        const memberInit = Math.floor(meta.initiative);
+        if (memberInit > group.initiative) {
+            group.initiative = memberInit;
+        }
+
+        // If any member has a group name set, use it (prefer non-empty names)
+        if (meta.groupName && meta.groupName.trim()) {
+            group.name = meta.groupName;
+        }
+
+        // Use OR logic for staged: if ANY member says staged, group is staged
+        // (This handles potential inconsistencies)
+        if (meta.groupStaged) {
+            group.staged = true;
+        }
+    }
+
+    // Convert to DerivedGroup array
+    return Array.from(groupMap.values()).map(g => ({
+        id: g.id,
+        name: g.name,
+        initiative: g.initiative,
+        active: g.activeMembers > 0, // Active if any member is active
+        staged: g.staged,
+        memberIds: g.memberIds,
+    }));
+}

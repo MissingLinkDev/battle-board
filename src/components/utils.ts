@@ -51,9 +51,12 @@ export function unitsToPixels(units: number, grid: GridInfo): number {
    Distance labels
    ========================= */
 
-export function formatFeet(n: number): number {
-    // Round to whole number (1 unit increments)
-    // Grid measurement type handles snapping to grid cells
+export function formatFeet(n: number, roundDistances: boolean = false, gridUnits: number = 5): number {
+    if (roundDistances) {
+        // Round to nearest grid unit (e.g., nearest 5 ft)
+        return Math.round(n / gridUnits) * gridUnits;
+    }
+    // Round to whole number (1 ft increments)
     return Math.round(n);
 }
 
@@ -61,10 +64,13 @@ export function formatFeet(n: number): number {
 export function formatDistanceLabel(
     valueInUnits: number,
     unit: string = "ft",
-    touchThresholdUnits: number = 5
+    touchThresholdUnits: number = 5,
+    roundDistances: boolean = false,
+    gridUnits: number = 5
 ): string {
     if (valueInUnits < touchThresholdUnits) return "Touch";
-    const formatted = formatFeet(valueInUnits);
+    const formatted = formatFeet(valueInUnits, roundDistances, gridUnits);
+    // Both modes return whole numbers, so display as integer
     return `${formatted} ${unit}`;
 }
 

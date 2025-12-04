@@ -8,6 +8,8 @@ export async function removeFromInitiative(id: string) {
         if (meta) {
             meta.inInitiative = false;
             meta.active = false;
+            meta.groupId = null;      // Clear group association
+            meta.initiative = 0;      // Reset initiative
             it.metadata = { ...(it.metadata ?? {}), [META_KEY]: { ...meta } };
         }
     });

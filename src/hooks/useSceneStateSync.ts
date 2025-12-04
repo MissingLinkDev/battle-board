@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
+import OBR from "@owlbear-rodeo/sdk";
 import {
     readSceneState,
     onSceneStateChange,
     saveSceneState,
     DEFAULT_SETTINGS,
+    getGroups,
     type SceneState,
     type InitiativeSettings,
     type Group,
@@ -23,7 +25,6 @@ export function useSceneStateSync() {
             setStarted((prev) => (prev !== s.started ? s.started : prev));
             setRound((prev) => (prev !== s.round ? s.round : prev));
             setSettings((prev) => ({ ...prev, ...(s.settings ?? {}) }));
-            setGroups(() => s.groups ?? []);
         };
 
         readSceneState().then((s) => !unmounted && apply(s)).catch(console.error);
@@ -32,6 +33,32 @@ export function useSceneStateSync() {
         return () => {
             unmounted = true;
             unsub();
+        };
+    }, []);
+
+    // NEW: Separate effect to derive groups from tokens
+    useEffect(() => {
+        let unmounted = false;
+
+        const updateGroups = () => {
+            getGroups().then(g => {
+                if (!unmounted) {
+                    setGroups(g);
+                }
+            }).catch(console.error);
+        };
+
+        // Initial fetch
+        updateGroups();
+
+        // Subscribe to item changes to update groups
+        const unsubItems = OBR.scene.items.onChange(() => {
+            updateGroups();
+        });
+
+        return () => {
+            unmounted = true;
+            unsubItems();
         };
     }, []);
 

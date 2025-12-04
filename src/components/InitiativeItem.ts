@@ -27,8 +27,10 @@ export type InitiativeItem = {
     dmPreview?: boolean;
     inInitiative?: boolean;
 
-    // NEW: Single group ID instead of array
+    // Token-based grouping
     groupId?: string | null;
+    groupName?: string | null;
+    groupStaged?: boolean;
 
     // Concentration tracking
     concentrating?: boolean;
@@ -84,8 +86,10 @@ export function initiativeFromItem(item: Item): InitiativeItem | null {
         dmPreview: meta.dmPreview ?? false,
         inInitiative: meta.inInitiative ?? false,
 
-        // Use migrated groupId or original
+        // Token-based grouping
         groupId: groupId ?? null,
+        groupName: meta.groupName ?? null,
+        groupStaged: meta.groupStaged ?? false,
 
         // Concentration tracking
         concentrating: meta.concentrating ?? false,
@@ -127,8 +131,10 @@ export function metaPatchFromRowDiff(before: InitiativeItem, after: InitiativeIt
     assign("dmPreview");
     assign("inInitiative");
 
-    // Handle groupId change
+    // Token-based grouping
     assign("groupId");
+    assign("groupName");
+    assign("groupStaged");
 
     // Concentration tracking
     assign("concentrating");

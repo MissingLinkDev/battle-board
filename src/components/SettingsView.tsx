@@ -577,6 +577,18 @@ export default function SettingsView({ value, onChange, onBack, rows, ready = tr
                                         />
                                     }
                                 />
+                                <Divider />
+                                <RowShell
+                                    title="Round Distances"
+                                    description="Round to nearest grid unit."
+                                    right={
+                                        <Toggle
+                                            checked={!!value.roundDistances}
+                                            onChange={(next) => set({ roundDistances: next })}
+                                            aria-label="toggle-round-distances"
+                                        />
+                                    }
+                                />
                             </AccordionDetails>
                         </Accordion>
                     </Box>

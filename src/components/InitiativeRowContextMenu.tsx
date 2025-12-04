@@ -60,6 +60,7 @@ export function InitiativeRowContextMenu({
             // Update local state for immediate UI feedback
             onChange({
                 groupId,
+                groupName: targetGroup?.name ?? null,
                 initiative: groupInitiative // Sync initiative with group
             });
         } catch (error) {
@@ -72,12 +73,13 @@ export function InitiativeRowContextMenu({
             // Create group with the current row's initiative as the default
             const group = await createGroup(name, row.initiative);
 
-            // Add token to the new group (this will sync initiatives automatically)
-            await addTokenToGroup(OBR, row.id, group.id);
+            // Add token to the new group, passing the group name and initiative
+            await addTokenToGroup(OBR, row.id, group.id, group.name, group.initiative);
 
             // Update local state for immediate UI feedback
             onChange({
-                groupId: group.id
+                groupId: group.id,
+                groupName: group.name,
                 // Initiative should already match since we created the group with this token's initiative
             });
         } catch (error) {
@@ -101,8 +103,12 @@ export function InitiativeRowContextMenu({
                 }
             }
 
-            // Update local state - only remove groupId, keep current initiative
-            onChange({ groupId: null });
+            // Update local state - clear all group-related fields
+            onChange({
+                groupId: null,
+                groupName: null,
+                groupStaged: false
+            });
 
             // Check if this was the last token in the group and delete the group if so
             if (currentGroupId) {
