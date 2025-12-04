@@ -3,36 +3,23 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
-import Tooltip from "@mui/material/Tooltip";
-import InfoRounded from "@mui/icons-material/InfoRounded";
 import type { DistanceInfo } from "../hooks/useDistances";
 
 type Props = {
     distances: DistanceInfo[];
     title?: string;
-    showTooltip?: boolean;
 };
 
 /**
  * Reusable distance display panel
  */
-export function DistancePanel({ distances, title = "Distances", showTooltip = true }: Props) {
+export function DistancePanel({ distances, title = "Distances" }: Props) {
     return (
         <Box sx={{ flex: 1, minWidth: 0 }}>
             <Stack direction="row" alignItems="center" justifyContent="center" sx={{ px: 1, py: 0.5 }}>
-                <Stack direction="row" alignItems="center" spacing={0.5}>
-                    <Typography sx={{ fontWeight: 700, fontSize: "0.95rem", textAlign: "center", mb: 0.75 }}>
-                        {title}
-                    </Typography>
-                    {showTooltip && (
-                        <Tooltip
-                            title="Measured from edge to edge; attack range must be greater than distance."
-                            enterDelay={300}
-                        >
-                            <InfoRounded fontSize="small" sx={{ color: "text.secondary", cursor: "help" }} />
-                        </Tooltip>
-                    )}
-                </Stack>
+                <Typography sx={{ fontWeight: 700, fontSize: "0.95rem", textAlign: "center", mb: 0.75 }}>
+                    {title}
+                </Typography>
             </Stack>
             <List dense disablePadding sx={{ px: 0, "& .MuiListItem-root": { py: 0.25 } }}>
                 {distances.length === 0 ? (
