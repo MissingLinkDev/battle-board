@@ -185,7 +185,6 @@ When you expand a token row, Battle Board calculates distances to all other toke
 - Uses Owlbear Rodeo's grid measurement system
 - Supports all measurement modes (Chebyshev, Euclidean, etc.)
 - Automatically includes elevation differences in distance calculations
-- Helpful tooltip: *"Measured edge-to-edge; attack range must be greater than distance"*
 
 ### Elevation Tracking
 
