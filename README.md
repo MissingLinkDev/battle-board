@@ -5,7 +5,8 @@ Battle Board is a powerful initiative tracker and combat management system for [
 ## Key Features
 - **Smart Initiative System** with decimal tie-breaking
 - **Automatic Range Overlays** for movement and attack ranges
-- **Real-time Distance Calculations** between all tokens
+- **Real-time Distance Calculations** between all tokens with elevation support
+- **Elevation Tracking** for flying creatures and vertical combat
 - **Advanced Group Management** with staging capabilities
 - **Comprehensive Health Tracking** with customizable player visibility
 - **Role-based Interface** (separate GM and Player views)
@@ -40,6 +41,7 @@ That's it! You now have a fully functional initiative tracker with automatic ran
 - Right-click any CHARACTER or MOUNT token
 - Select **"Add to Battle Board"** (for tokens not yet added)
 - Select **"Remove from Battle Board"** (for tokens already added)
+- Select **"Set Elevation"** to set the token's elevation for vertical combat
 
 <img src="https://battle-board.missinglinkdev.com/screenshots/context-menu-add.png" alt="Context Menu" style="max-width: 100%; height: auto;">
 
@@ -174,6 +176,7 @@ When you expand a token row, Battle Board calculates distances to all other toke
 - **Sorted by proximity** (closest first)
 - **"Touch" indicator** for adjacent tokens (< 5ft)
 - **Real-time updates** as tokens move
+- **Elevation-aware** - Accounts for vertical distance when tokens have different elevations
 
 <img src="https://battle-board.missinglinkdev.com/screenshots/distance-panel.png" alt="Distance Panel" style="max-width: 100%; height: auto;">
 
@@ -181,7 +184,31 @@ When you expand a token row, Battle Board calculates distances to all other toke
 - Distances account for token size (not just position)
 - Uses Owlbear Rodeo's grid measurement system
 - Supports all measurement modes (Chebyshev, Euclidean, etc.)
+- Automatically includes elevation differences in distance calculations
 - Helpful tooltip: *"Measured edge-to-edge; attack range must be greater than distance"*
+
+### Elevation Tracking
+
+#### Setting Elevation
+Battle Board supports full 3D combat with elevation tracking for flying creatures, elevated platforms, and vertical encounters:
+
+**Setting Elevation via Context Menu:**
+- Right-click any token on the map
+- Select **"Set Elevation"**
+- Enter the elevation value (in feet)
+- The token's elevation is saved and synced across all clients
+
+<img src="https://battle-board.missinglinkdev.com/screenshots/elevation-menu.png" alt="Elevation Menu" style="max-width: 100%; height: auto;">
+
+**Elevation-Aware Distance Calculations:**
+- All distance calculations automatically account for elevation differences
+- Perfect for flying creatures, elevated platforms, and multi-level encounters
+- Works with all grid measurement modes
+
+**Common Use Cases:**
+- **Flying Creatures** - Set elevation for dragons, flying PCs, or hovering enemies
+- **Elevated Platforms** - Track characters on balconies, towers, or cliffs
+- **Environmental Hazards** - Track distance to flying hazards or elevated threats
 
 ### Group Management
 

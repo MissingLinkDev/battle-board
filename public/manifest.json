@@ -4,6 +4,7 @@
     "manifest_version": 1,
     "author": "Missing Link Dev",
     "description": "Initiative tracker with range overlays, distance calculations, health management, and advanced group controls.",
+    "homepage_url": "https://github.com/MissingLinkDev/battle-board",
     "icon": "/icon.svg",
     "action": {
         "title": "Battle Board",
