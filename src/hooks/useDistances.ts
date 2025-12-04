@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from "react";
+import OBR from "@owlbear-rodeo/sdk";
 import type { CMToken } from "../components/tokens";
 import type { InitiativeItem } from "../components/InitiativeItem";
 import { formatFeet, formatDistanceLabel, obrDistanceBetweenTokensUnits, getCachedGridUnits, type TokenDistanceMode } from "../components/utils";
@@ -19,13 +20,23 @@ export function useDistances(
     tokens: CMToken[],
     enabled: boolean = true,
     mode: TokenDistanceMode = "box",
-    items?: InitiativeItem[],
-    roundDistances: boolean = true
+    items?: InitiativeItem[]
 ) {
     const [distances, setDistances] = useState<DistanceInfo[]>([]);
+    const [gridVersion, setGridVersion] = useState(0);
     const { unitLabel, unitsPerCell } = getCachedGridUnits();
 
-    const lastCalculationRef = useRef<{ tokenId: string; mode: TokenDistanceMode; positions: string } | null>(null);
+    const lastCalculationRef = useRef<{ tokenId: string; mode: TokenDistanceMode; positions: string; gridVersion: number } | null>(null);
+
+    // Subscribe to grid changes to trigger recalculation when measurement type changes
+    useEffect(() => {
+        const unsubscribe = OBR.scene.grid.onChange(() => {
+            setGridVersion(v => v + 1);
+        });
+        return () => {
+            unsubscribe();
+        };
+    }, []);
 
     // Memoize the target token and other tokens to avoid unnecessary recalculations
     const targetToken = useMemo(() =>
@@ -68,10 +79,10 @@ export function useDistances(
                 return;
             }
 
-            // Check if we need to recalculate
+            // Check if we need to recalculate (skip cache check if grid changed)
             const currentSignature = positionSignature;
-            if (lastCalculationRef.current?.positions === currentSignature) {
-                return; // No position changes, skip calculation
+            if (lastCalculationRef.current?.positions === currentSignature && gridVersion === lastCalculationRef.current?.gridVersion) {
+                return; // No position or grid changes, skip calculation
             }
 
             try {
@@ -90,8 +101,8 @@ export function useDistances(
                         return {
                             id: token.id,
                             name: token.name || "(unnamed)",
-                            ft: formatFeet(raw, roundDistances, unitsPerCell),
-                            text: formatDistanceLabel(raw, unitLabel, unitsPerCell, roundDistances, unitsPerCell),
+                            ft: formatFeet(raw),
+                            text: formatDistanceLabel(raw, unitLabel, unitsPerCell),
                         };
                     })
                 );
@@ -101,7 +112,8 @@ export function useDistances(
                     lastCalculationRef.current = {
                         tokenId,
                         mode,
-                        positions: currentSignature
+                        positions: currentSignature,
+                        gridVersion
                     };
                 }
             } catch (error) {
@@ -117,7 +129,7 @@ export function useDistances(
         return () => {
             cancelled = true;
         };
-    }, [positionSignature, enabled, unitLabel, unitsPerCell, targetToken, otherTokens, tokenId, mode, elevationMap, roundDistances]);
+    }, [positionSignature, enabled, unitLabel, unitsPerCell, targetToken, otherTokens, tokenId, mode, elevationMap, gridVersion]);
 
     return distances;
 }

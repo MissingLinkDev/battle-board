@@ -23,7 +23,6 @@ export type InitiativeSettings = {
     showAttackRange: boolean;
     showConditions: boolean;
     showDistances: boolean;
-    roundDistances: boolean;
     // Gameplay
     /** When true the list is hidden from players (UI shows the inverted "Show to players" switch) */
     disablePlayerList: boolean;
@@ -62,7 +61,6 @@ export const DEFAULT_SETTINGS: InitiativeSettings = {
     showAttackRange: true,
     showConditions: true,
     showDistances: true,
-    roundDistances: true,
     // Gameplay
     // Default the player list to SHOWN for players (UI toggle will start ON)
     disablePlayerList: false,
@@ -116,12 +114,6 @@ function migrateSettings(incoming: Partial<InitiativeSettings> | undefined): Ini
     // If not present, default to true (enabled)
     if (merged.groupStagingControlsVisibility === undefined) {
         merged.groupStagingControlsVisibility = true;
-    }
-
-    // ---- Migration for roundDistances ----
-    // If not present, default to true (enabled)
-    if (merged.roundDistances === undefined) {
-        merged.roundDistances = true;
     }
 
     return merged;

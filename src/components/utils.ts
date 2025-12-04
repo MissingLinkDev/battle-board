@@ -51,26 +51,20 @@ export function unitsToPixels(units: number, grid: GridInfo): number {
    Distance labels
    ========================= */
 
-export function formatFeet(n: number, roundDistances: boolean = true, gridUnits: number = 5): number {
-    if (roundDistances) {
-        // Round to nearest grid unit (e.g., nearest 5 ft)
-        return Math.round(n / gridUnits) * gridUnits;
-    }
-    // Round to whole number (1 ft increments)
+export function formatFeet(n: number): number {
+    // Round to whole number (1 unit increments)
+    // Grid measurement type handles snapping to grid cells
     return Math.round(n);
 }
 
-/** Label helper with unit: "<multiplier unit" => "Touch", else "N unit" (rounded). */
+/** Label helper with unit: "<threshold" => "Touch", else "N unit" (rounded). */
 export function formatDistanceLabel(
     valueInUnits: number,
     unit: string = "ft",
-    touchThresholdUnits: number = 5,
-    roundDistances: boolean = true,
-    gridUnits: number = 5
+    touchThresholdUnits: number = 5
 ): string {
     if (valueInUnits < touchThresholdUnits) return "Touch";
-    const formatted = formatFeet(valueInUnits, roundDistances, gridUnits);
-    // Both modes return whole numbers, so display as integer
+    const formatted = formatFeet(valueInUnits);
     return `${formatted} ${unit}`;
 }
 
@@ -95,6 +89,170 @@ export type Box3D = {
     height: number;  // y-axis size (units)
     depth: number;   // z-axis size (units)
 };
+
+/** 3D point/vector */
+export type Vec3 = { x: number; y: number; z: number };
+
+/** Calculate 3D Euclidean distance between two points */
+function distance3D(a: Vec3, b: Vec3): number {
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    const dz = a.z - b.z;
+    return Math.sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+/**
+ * Generate centers of sub-blocks for a token based on grid size.
+ *
+ * Each token is subdivided into grid-sized cubes. For example, a 10×10×10 token
+ * with 5ft grid becomes 2×2×2 = 8 sub-blocks. Tokens smaller than grid size
+ * have a single sub-block at their center.
+ *
+ * @param box Token's 3D bounding box in scene units
+ * @param gridUnitsPerCell Grid size in scene units (e.g., 5 for 5ft grid)
+ * @returns Array of sub-block center positions
+ */
+function generateSubBlockCenters(box: Box3D, gridUnitsPerCell: number): Vec3[] {
+    // Calculate number of sub-blocks in each dimension
+    // Use Math.max to ensure at least 1 block even for tiny tokens
+    const blocksX = Math.max(1, Math.round(box.width / gridUnitsPerCell));
+    const blocksY = Math.max(1, Math.round(box.height / gridUnitsPerCell));
+    const blocksZ = Math.max(1, Math.round(box.depth / gridUnitsPerCell));
+
+    // Calculate the actual size of each sub-block
+    const blockSizeX = box.width / blocksX;
+    const blockSizeY = box.height / blocksY;
+    const blockSizeZ = box.depth / blocksZ;
+
+    const centers: Vec3[] = [];
+
+    // Generate centers for all sub-blocks
+    for (let ix = 0; ix < blocksX; ix++) {
+        for (let iy = 0; iy < blocksY; iy++) {
+            for (let iz = 0; iz < blocksZ; iz++) {
+                // Calculate offset from token center for this sub-block
+                // Center of block i is at (i + 0.5) * blockSize - (totalSize / 2)
+                const offsetX = (ix + 0.5) * blockSizeX - box.width / 2;
+                const offsetY = (iy + 0.5) * blockSizeY - box.height / 2;
+                const offsetZ = (iz + 0.5) * blockSizeZ - box.depth / 2;
+
+                centers.push({
+                    x: box.cx + offsetX,
+                    y: box.cy + offsetY,
+                    z: box.cz + offsetZ,
+                });
+            }
+        }
+    }
+
+    return centers;
+}
+
+/**
+ * Find the pair of sub-blocks (one from each token) that are closest together.
+ *
+ * Uses brute force O(n×m) comparison, which is acceptable for typical token sizes:
+ * - Large (2×2×2 = 8) vs Huge (3×3×3 = 27): 216 comparisons
+ * - Gargantuan (4×4×4 = 64) vs Gargantuan: 4,096 comparisons
+ *
+ * @param centersA Sub-block centers for token A
+ * @param centersB Sub-block centers for token B
+ * @returns Closest points and distance between them
+ */
+function findNearestSubBlockPair(
+    centersA: Vec3[],
+    centersB: Vec3[]
+): { pointA: Vec3; pointB: Vec3; distance: number } {
+    let minDistance = Infinity;
+    let bestA: Vec3 = centersA[0];
+    let bestB: Vec3 = centersB[0];
+
+    for (const centerA of centersA) {
+        for (const centerB of centersB) {
+            const dist = distance3D(centerA, centerB);
+            if (dist < minDistance) {
+                minDistance = dist;
+                bestA = centerA;
+                bestB = centerB;
+            }
+        }
+    }
+
+    return {
+        pointA: bestA,
+        pointB: bestB,
+        distance: minDistance,
+    };
+}
+
+/**
+ * Calculate distance between two tokens using sub-block center-to-center method.
+ *
+ * This method:
+ * 1. Subdivides each token into grid-sized sub-blocks
+ * 2. Finds which sub-blocks are nearest between the two tokens
+ * 3. Returns the Euclidean distance between those sub-block centers
+ *
+ * This replaces the previous edge-to-edge AABB calculation for more accurate
+ * distance measurement, especially for large creatures.
+ *
+ * @param a First token's 3D box
+ * @param b Second token's 3D box
+ * @param gridUnitsPerCell Grid size for sub-block calculation
+ * @returns Closest points and distance between them
+ */
+export function closestSubBlockDistance3D(
+    a: Box3D,
+    b: Box3D,
+    gridUnitsPerCell: number
+): { pointA: Vec3; pointB: Vec3; distance: number } {
+    const centersA = generateSubBlockCenters(a, gridUnitsPerCell);
+    const centersB = generateSubBlockCenters(b, gridUnitsPerCell);
+    return findNearestSubBlockPair(centersA, centersB);
+}
+
+/**
+ * Combine horizontal and vertical distances based on grid measurement type.
+ *
+ * @param horizontalCells Horizontal distance in grid cells
+ * @param verticalCells Vertical distance in grid cells
+ * @param measurement Grid measurement type
+ * @returns Combined distance in grid cells
+ */
+function combine3DDistance(
+    horizontalCells: number,
+    verticalCells: number,
+    measurement: string
+): number {
+    switch (measurement) {
+        case "EUCLIDEAN":
+            // True 3D distance - Pythagorean theorem
+            return Math.sqrt(horizontalCells ** 2 + verticalCells ** 2);
+
+        case "CHEBYSHEV":
+            // Chessboard/5e D&D - diagonal movement is same cost as straight
+            // For 3D: max of horizontal or vertical gives correct diagonal behavior
+            return Math.max(horizontalCells, verticalCells);
+
+        case "MANHATTAN":
+            // No diagonal movement - only horizontal + vertical
+            return horizontalCells + verticalCells;
+
+        case "ALTERNATING":
+            // D&D 3.5e - every 2nd diagonal costs 2 squares
+            // Treat vertical as another dimension to alternate with
+            const diagonals = Math.min(horizontalCells, verticalCells);
+            const straight = Math.abs(horizontalCells - verticalCells);
+            // Every 2 diagonal moves: first costs 1, second costs 2 (avg 1.5)
+            const diagonalCost = Math.floor(diagonals / 2) * 3 + (diagonals % 2);
+            return diagonalCost + straight;
+
+        default:
+            // Fallback to Euclidean for hex grids and unknown measurement types
+            // This ensures consistent 3D distance calculation for all grid types
+            return Math.sqrt(horizontalCells ** 2 + verticalCells ** 2);
+    }
+}
 
 /** Build an axis-aligned rectangle (AABB) in pixels from a CMToken. */
 export function tokenToBoxPx(token: CMToken, grid: GridInfo): BoxPx {
@@ -200,10 +358,11 @@ export type TokenDistanceMode = "box" | "center";
  *
  * Tokens are treated as equal-sided cubes (size = max(width, height)).
  * Elevation represents the bottom of the token cube.
- * Distance is calculated as closest point on cube A to closest point on cube B
- * in true 3D space, then 1 grid unit is added so adjacent tokens read as "1 grid apart".
  *
- * - mode="box": 3D edge-to-edge + 1 grid unit (recommended)
+ * - mode="box": Subdivides tokens into grid-sized sub-blocks, finds nearest sub-blocks,
+ *   uses OBR's grid distance for horizontal component (respects Euclidean/Chebyshev/
+ *   Manhattan/Alternating measurement type), then combines with vertical component
+ *   according to the measurement type (recommended)
  * - mode="center": pure center-to-center distance (ignores token size)
  *
  * @param a First token
@@ -235,13 +394,25 @@ export async function obrDistanceBetweenTokensUnits(
         return Math.sqrt(horizontalDistance * horizontalDistance + elevationDiff * elevationDiff);
     }
 
-    // "box" mode: 3D edge-to-edge + 1 grid unit
+    // "box" mode: 3D sub-block center-to-center with OBR grid distance
     const boxA = tokenToBox3D(a, grid, elevationA);
     const boxB = tokenToBox3D(b, grid, elevationB);
-    const { distance } = closestPointsOnAABBs3D(boxA, boxB);
+    const { pointA, pointB } = closestSubBlockDistance3D(boxA, boxB, grid.unitsPerCell);
 
-    // Add 1 grid unit so adjacent tokens show as "1 grid apart"
-    return distance + grid.unitsPerCell;
+    // Get horizontal distance using OBR's grid measurement (handles Euclidean/Chebyshev/etc)
+    const pointAPixels = { x: unitsToPixels(pointA.x, grid), y: unitsToPixels(pointA.y, grid) };
+    const pointBPixels = { x: unitsToPixels(pointB.x, grid), y: unitsToPixels(pointB.y, grid) };
+    const horizontalCells = await OBR.scene.grid.getDistance(pointAPixels, pointBPixels);
+
+    // Get vertical distance in grid cells
+    const verticalUnits = Math.abs(pointA.z - pointB.z);
+    const verticalCells = verticalUnits / grid.unitsPerCell;
+
+    // Combine based on measurement type
+    const measurement = await OBR.scene.grid.getMeasurement();
+    const totalCells = combine3DDistance(horizontalCells, verticalCells, measurement);
+
+    return totalCells * grid.unitsPerCell;
 }
 
 /** Convenience wrapper for arbitrary pixel points. Returns scene units. */
