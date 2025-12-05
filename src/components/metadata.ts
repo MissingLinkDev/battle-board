@@ -274,7 +274,7 @@ export async function syncGroupTokensInitiative(OBR: any, groupId: string, group
         patch: {
             // Give each member a slightly different initiative for stable sorting
             // Group members will be ordered by their index in the group
-            initiative: groupInitiative + (index * 0.01)
+            initiative: groupInitiative + (index * 0.1)
         }
     }));
 
@@ -350,7 +350,7 @@ export async function createGroupFromTokens(
             groupId,
             groupName,
             groupStaged: false,
-            initiative: groupInitiative + (index * 0.01),
+            initiative: groupInitiative + (index * 0.1),
         } as Partial<MetaShape>
     }));
 
@@ -418,7 +418,7 @@ export async function addTokenToGroupWithInitiative(OBR: any, id: string, groupI
         meta.groupId = groupId;
 
         // Set initiative to match group with decimal sub-ordering for stable sorting
-        meta.initiative = groupInitiative + (memberIndex * 0.01);
+        meta.initiative = groupInitiative + (memberIndex * 0.1);
 
         // Clean up legacy encounterGroups if present
         if (meta.encounterGroups) {
