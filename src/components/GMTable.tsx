@@ -24,6 +24,7 @@ import type { CMToken } from "./tokens";
 import { useMemo } from "react";
 import { deleteGroup } from "./SceneState";
 import StopRounded from "@mui/icons-material/StopRounded";
+import { useCentralizedRings } from "../hooks/useRingsManager";
 
 type Props = {
     items: InitiativeItem[];
@@ -89,6 +90,13 @@ export default function GmTable({
     const showConc = settings.showConcentration ?? false;
 
     const gmColCount = 3 + (showAC ? 1 : 0) + (showHP ? 2 : 0) + (showConc ? 1 : 0) + (showDMR ? 1 : 0);
+
+    // Centralized ring management for ALL items (grouped and ungrouped)
+    useCentralizedRings(items, {
+        started,
+        showGlobalRings: globalSettings?.showRangeRings ?? false,
+        ready,
+    });
 
     const getActiveIndex = (renderItems: RenderItem[]) => {
         return renderItems.findIndex((item) => {

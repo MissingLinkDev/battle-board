@@ -93,13 +93,14 @@ export default function InitiativeRow({
     const distances = useDistances(row.id, tokens, settings?.showDistances, "box", items, globalSettings.roundDistances ?? false);
     const { config } = useRingState(row);
 
-    // Ring management with centralized logic
+    // DM preview ring management only
+    // Global rings are managed centrally at GMTable level to avoid conflicts
     useRingManager({
         tokenId: row.id,
         active: row.active,
         started,
         playerCharacter: !!row.playerCharacter,
-        showGlobalRings: globalSettings.showRangeRings,
+        showGlobalRings: false, // Disabled - managed centrally at GMTable
         showDmPreview: dmPreview,
         ready,
     }, config);
