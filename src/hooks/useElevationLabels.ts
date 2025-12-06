@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import OBR, { isImage, type Item } from "@owlbear-rodeo/sdk";
-import { ensureElevationLabel } from "../components/elevationLabels";
+import { ensureElevationLabel, cleanupOrphanedLabels } from "../components/elevationLabels";
 import { readMeta } from "../components/metadata";
 import { getGridInfo } from "../components/utils";
 import { getPluginId } from "../getPluginId";
@@ -21,6 +21,9 @@ export function useElevationLabels(ready: boolean) {
 
         const initLabels = async () => {
             try {
+                // Clean up any orphaned labels first
+                await cleanupOrphanedLabels();
+
                 // Get current unit from grid
                 const grid = await getGridInfo();
                 const unit = grid.unitLabel;

@@ -37,7 +37,15 @@ const buildLabelMeta = (ownerId: string): ElevationLabelMeta => ({
 });
 
 /**
+ * Generate a deterministic ID for an elevation label.
+ * This makes labels instantly findable by ID without scanning all items.
+ */
+const determineLabelId = (tokenId: string): string =>
+    `${getPluginId("elevation-label")}.${tokenId}`;
+
+/**
  * Find an existing elevation label by its stable key.
+ * @deprecated Use findElevationLabel() instead for more robust discovery
  */
 async function findLabelByKey(key: string): Promise<Label | null> {
     const items = await OBR.scene.items.getItems();
@@ -48,6 +56,122 @@ async function findLabelByKey(key: string): Promise<Label | null> {
         }
     }
     return null;
+}
+
+/**
+ * Find ALL elevation labels for a given token using multi-tier discovery.
+ * Searches by: deterministic ID, metadata key, owner ID, and attachment.
+ * This ensures labels are found regardless of how they were created.
+ */
+async function findAllLabelsForToken(tokenId: string): Promise<Label[]> {
+    const deterministicId = determineLabelId(tokenId);
+    const items = await OBR.scene.items.getItems();
+    const matches: Label[] = [];
+
+    for (const it of items) {
+        let isMatch = false;
+
+        // Tier 1: Direct ID match (fastest, for new labels)
+        if (it.id === deterministicId) {
+            isMatch = true;
+        } else {
+            const meta = (it.metadata as any)?.[LABEL_META_KEY] as ElevationLabelMeta | undefined;
+
+            // Tier 2: Metadata key match (for old labels)
+            if (meta?.__elevationLabel__ && meta.key === labelKey(tokenId)) {
+                isMatch = true;
+            }
+            // Tier 3: Owner ID match (for persist-created labels)
+            else if (meta?.__elevationLabel__ && meta.ownerId === tokenId) {
+                isMatch = true;
+            }
+            // Tier 4: Attachment match with emoji (for labels with corrupt metadata)
+            else if (
+                it.attachedTo === tokenId &&
+                (it as any).text?.plainText?.includes('🪽')
+            ) {
+                isMatch = true;
+            }
+        }
+
+        if (isMatch) {
+            matches.push(it as unknown as Label);
+        }
+    }
+
+    return matches;
+}
+
+/**
+ * Score a label's quality based on how it was identified.
+ * Higher score = better quality (more reliable identification).
+ */
+function scoreLabelQuality(label: Label): number {
+    let score = 0;
+
+    // Highest priority: has deterministic ID pattern
+    if (label.id.startsWith(getPluginId("elevation-label"))) {
+        score += 1000;
+    }
+
+    const meta = (label.metadata as any)?.[LABEL_META_KEY] as ElevationLabelMeta | undefined;
+
+    // Has proper metadata with key
+    if (meta?.key) {
+        score += 100;
+    }
+
+    // Has metadata marker
+    if (meta?.__elevationLabel__) {
+        score += 10;
+    }
+
+    // Has ownerId
+    if (meta?.ownerId) {
+        score += 5;
+    }
+
+    // Is attached to token
+    if (label.attachedTo) {
+        score += 1;
+    }
+
+    return score;
+}
+
+/**
+ * Deduplicate labels by keeping the highest quality one and deleting the rest.
+ * Returns the kept label, or null if no labels were provided.
+ */
+async function deduplicateLabels(labels: Label[]): Promise<Label | null> {
+    if (labels.length === 0) return null;
+    if (labels.length === 1) return labels[0];
+
+    // Sort by quality: highest score first
+    const sorted = labels.sort((a, b) => {
+        const aScore = scoreLabelQuality(a);
+        const bScore = scoreLabelQuality(b);
+        return bScore - aScore;
+    });
+
+    const keeper = sorted[0];
+    const toDelete = sorted.slice(1);
+
+    if (toDelete.length > 0) {
+        await OBR.scene.items.deleteItems(toDelete.map(l => l.id));
+        console.log(`[Battle Board] Deduplicated ${toDelete.length} elevation label(s)`);
+    }
+
+    return keeper;
+}
+
+/**
+ * Find the elevation label for a token, automatically deduplicating if multiple exist.
+ * This is the main label discovery function that should be used instead of findLabelByKey.
+ */
+async function findElevationLabel(tokenId: string): Promise<Label | null> {
+    const allLabels = await findAllLabelsForToken(tokenId);
+    return await deduplicateLabels(allLabels);
 }
 
 /* =========================
@@ -80,6 +204,57 @@ async function calculateLabelPosition(token: Item): Promise<Vector2> {
 }
 
 /* =========================
+   Cleanup Functions
+   ========================= */
+
+/**
+ * Remove elevation labels whose owner tokens no longer exist in the scene.
+ * This prevents orphaned labels from accumulating over time.
+ */
+export async function cleanupOrphanedLabels(): Promise<void> {
+    try {
+        const items = await OBR.scene.items.getItems();
+
+        // Get all token IDs
+        const tokenIds = new Set(
+            items
+                .filter(it => isImage(it) && (it.layer === "CHARACTER" || it.layer === "MOUNT"))
+                .map(it => it.id)
+        );
+
+        // Find labels without valid owner tokens
+        const orphans = items.filter(it => {
+            const meta = (it.metadata as any)?.[LABEL_META_KEY] as ElevationLabelMeta | undefined;
+            if (!meta?.__elevationLabel__) return false;
+
+            // Try to find owner ID from multiple sources
+            let ownerId = meta.ownerId;
+
+            // If no ownerId in metadata, try to extract from deterministic ID
+            if (!ownerId && it.id.startsWith(getPluginId("elevation-label"))) {
+                const parts = it.id.split('.');
+                ownerId = parts[parts.length - 1];
+            }
+
+            // If still no owner, try attachedTo
+            if (!ownerId && it.attachedTo) {
+                ownerId = it.attachedTo;
+            }
+
+            // Label is orphaned if we found an owner ID but that token doesn't exist
+            return ownerId && !tokenIds.has(ownerId);
+        });
+
+        if (orphans.length > 0) {
+            await OBR.scene.items.deleteItems(orphans.map(it => it.id));
+            console.log(`[Battle Board] Cleaned up ${orphans.length} orphaned elevation label(s)`);
+        }
+    } catch (error) {
+        console.error("[Battle Board] Error cleaning up orphaned labels:", error);
+    }
+}
+
+/* =========================
    Main API Functions
    ========================= */
 
@@ -94,12 +269,11 @@ export async function ensureElevationLabel(opts: {
 }): Promise<void> {
     try {
         const { tokenId, elevation, unit = "ft" } = opts;
-        const key = labelKey(tokenId);
         const meta = buildLabelMeta(tokenId);
 
         // If elevation is 0 or negative, remove label
         if (!elevation || elevation <= 0) {
-            const stale = await findLabelByKey(key);
+            const stale = await findElevationLabel(tokenId);
             if (stale) {
                 await OBR.scene.items.deleteItems([stale.id]);
             }
@@ -109,14 +283,15 @@ export async function ensureElevationLabel(opts: {
         // Get token to calculate position
         const [token] = await OBR.scene.items.getItems((it) => it.id === tokenId);
         if (!token) {
-            console.warn(`Token ${tokenId} not found, cannot create elevation label`);
+            console.warn(`[Battle Board] Token ${tokenId} not found, cannot create elevation label`);
             return;
         }
 
         const position = await calculateLabelPosition(token);
         const plainText = `🪽 ${elevation} ${unit}`;
 
-        const existing = await findLabelByKey(key);
+        // Use new discovery method with automatic deduplication
+        const existing = await findElevationLabel(tokenId);
 
         if (existing) {
             // Update existing label
@@ -137,8 +312,9 @@ export async function ensureElevationLabel(opts: {
                 (label.metadata as any)[LABEL_META_KEY] = meta;
             });
         } else {
-            // Create new label
+            // Create new label with deterministic ID
             const label = buildLabel()
+                .id(determineLabelId(tokenId))
                 .position(position)
                 .plainText(plainText)
                 .fontSize(LABEL_FONT_SIZE)
@@ -162,8 +338,8 @@ export async function ensureElevationLabel(opts: {
 
         }
     } catch (error) {
-        console.error("Error in ensureElevationLabel:", error);
-        console.error("Options:", opts);
+        console.error("[Battle Board] Error in ensureElevationLabel:", error);
+        console.error("[Battle Board] Options:", opts);
         throw error;
     }
 }
@@ -172,8 +348,7 @@ export async function ensureElevationLabel(opts: {
  * Clear the elevation label for a specific token.
  */
 export async function clearElevationLabel(tokenId: string): Promise<void> {
-    const key = labelKey(tokenId);
-    const existing = await findLabelByKey(key);
+    const existing = await findElevationLabel(tokenId);
     if (existing) {
         await OBR.scene.items.deleteItems([existing.id]);
     }
