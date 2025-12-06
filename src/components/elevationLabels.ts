@@ -43,20 +43,6 @@ const buildLabelMeta = (ownerId: string): ElevationLabelMeta => ({
 const determineLabelId = (tokenId: string): string =>
     `${getPluginId("elevation-label")}.${tokenId}`;
 
-/**
- * Find an existing elevation label by its stable key.
- * @deprecated Use findElevationLabel() instead for more robust discovery
- */
-async function findLabelByKey(key: string): Promise<Label | null> {
-    const items = await OBR.scene.items.getItems();
-    for (const it of items) {
-        const meta = (it.metadata as any)?.[LABEL_META_KEY] as ElevationLabelMeta | undefined;
-        if (meta && meta.__elevationLabel__ && meta.key === key) {
-            return it as unknown as Label;
-        }
-    }
-    return null;
-}
 
 /**
  * Find ALL elevation labels for a given token using multi-tier discovery.
@@ -306,7 +292,7 @@ export async function ensureElevationLabel(opts: {
                 label.visible = true;
                 label.layer = "TEXT";
                 label.locked = true;
-                label.disableHit = true;
+                label.disableHit = false;
 
                 label.metadata = { ...(label.metadata ?? {}) };
                 (label.metadata as any)[LABEL_META_KEY] = meta;
@@ -328,7 +314,7 @@ export async function ensureElevationLabel(opts: {
                 .attachedTo(tokenId)
                 .layer("TEXT")
                 .locked(true)
-                .disableHit(true)
+                .disableHit(false)
                 .visible(true)
                 .metadata({ [LABEL_META_KEY]: meta })
                 .build();
