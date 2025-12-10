@@ -99,7 +99,7 @@ function ElevationMenu() {
             size="small"
             autoFocus
             fullWidth
-            min={0}
+            min={-1000}
             max={1000}
             step={5}
             unit={unit}

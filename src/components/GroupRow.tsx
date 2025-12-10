@@ -357,6 +357,7 @@ export default function GroupRow({
                     globalSettings={globalSettings}
                     started={started}
                     tokens={tokens}
+                    items={items}
                     colSpan={colSpan}
                     ready={ready}
                     groups={groups}

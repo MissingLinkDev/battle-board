@@ -257,8 +257,8 @@ export async function ensureElevationLabel(opts: {
         const { tokenId, elevation, unit = "ft" } = opts;
         const meta = buildLabelMeta(tokenId);
 
-        // If elevation is 0 or negative, remove label
-        if (!elevation || elevation <= 0) {
+        // If elevation is 0, remove label (ground level has no indicator)
+        if (elevation === 0) {
             const stale = await findElevationLabel(tokenId);
             if (stale) {
                 await OBR.scene.items.deleteItems([stale.id]);
@@ -274,7 +274,8 @@ export async function ensureElevationLabel(opts: {
         }
 
         const position = await calculateLabelPosition(token);
-        const plainText = `🪽 ${elevation} ${unit}`;
+        const icon = elevation > 0 ? "🪽" : "⬇️";
+        const plainText = `${icon} ${elevation} ${unit}`;
 
         // Use new discovery method with automatic deduplication
         const existing = await findElevationLabel(tokenId);

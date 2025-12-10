@@ -3,6 +3,7 @@ import OBR from "@owlbear-rodeo/sdk";
 import type { CMToken } from "../components/tokens";
 import type { InitiativeItem } from "../components/InitiativeItem";
 import { formatFeet, formatDistanceLabel, obrDistanceBetweenTokensUnits, getCachedGridUnits, type TokenDistanceMode } from "../components/utils";
+import { readMeta } from "../components/metadata";
 
 export type DistanceInfo = {
     id: string;
@@ -56,6 +57,32 @@ export function useDistances(
         return new Map(items.map(item => [item.id, item.elevation ?? 0]));
     }, [items]);
 
+    // Track whether we need to fetch elevations from scene
+    const needsSceneElevation = elevationMap.size === 0;
+
+    // Track elevation changes from scene metadata when not using items array
+    const [sceneElevationVersion, setSceneElevationVersion] = useState(0);
+
+    // Subscribe to scene item changes to detect elevation updates
+    useEffect(() => {
+        if (!needsSceneElevation || !enabled) return;
+
+        const unsubscribe = OBR.scene.items.onChange(async (changedItems) => {
+            // Only care about items in our token list
+            const relevantIds = new Set([tokenId, ...otherTokens.map(t => t.id)]);
+            const relevantChanges = changedItems.filter(item => relevantIds.has(item.id));
+
+            if (relevantChanges.length > 0) {
+                // Trigger recalculation by bumping version
+                setSceneElevationVersion(v => v + 1);
+            }
+        });
+
+        return () => {
+            unsubscribe();
+        };
+    }, [needsSceneElevation, enabled, tokenId, otherTokens]);
+
     // Create a signature of current positions and elevations for change detection
     const positionSignature = useMemo(() => {
         if (!targetToken || otherTokens.length === 0) return '';
@@ -68,8 +95,9 @@ export function useDistances(
             .sort()
             .join('|');
 
-        return `${tokenId}:${mode}:${positions}`;
-    }, [targetToken, otherTokens, tokenId, mode, elevationMap]);
+        // Include scene elevation version to trigger recalc when metadata changes
+        return `${tokenId}:${mode}:${positions}:scene=${needsSceneElevation}:v${sceneElevationVersion}`;
+    }, [targetToken, otherTokens, tokenId, mode, elevationMap, needsSceneElevation, sceneElevationVersion]);
 
     useEffect(() => {
         let cancelled = false;
@@ -87,11 +115,30 @@ export function useDistances(
             }
 
             try {
-                const targetElevation = elevationMap.get(tokenId) ?? 0;
+                // If elevationMap is empty (tokens not in initiative), fetch elevation from scene metadata
+                let targetElevation = elevationMap.get(tokenId) ?? 0;
+
+                // Build elevation lookup from scene items if needed
+                const needsSceneElevation = elevationMap.size === 0;
+                const sceneElevationMap = new Map<string, number>();
+
+                if (needsSceneElevation) {
+                    const tokenIds = [tokenId, ...otherTokens.map(t => t.id)];
+                    const sceneItems = await OBR.scene.items.getItems(tokenIds);
+                    for (const item of sceneItems) {
+                        const meta = readMeta(item);
+                        if (meta) {
+                            sceneElevationMap.set(item.id, meta.elevation ?? 0);
+                        }
+                    }
+                    targetElevation = sceneElevationMap.get(tokenId) ?? 0;
+                }
 
                 const calculations = await Promise.all(
                     otherTokens.map(async (token) => {
-                        const tokenElevation = elevationMap.get(token.id) ?? 0;
+                        const tokenElevation = needsSceneElevation
+                            ? (sceneElevationMap.get(token.id) ?? 0)
+                            : (elevationMap.get(token.id) ?? 0);
                         const raw = await obrDistanceBetweenTokensUnits(
                             targetToken,
                             token,

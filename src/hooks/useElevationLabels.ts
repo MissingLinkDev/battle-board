@@ -28,7 +28,7 @@ export function useElevationLabels(ready: boolean) {
                 const grid = await getGridInfo();
                 const unit = grid.unitLabel;
 
-                // Initialize labels for all tokens with elevation > 0
+                // Initialize labels for all tokens with non-zero elevation
                 const items = await OBR.scene.items.getItems(
                     (item) => isImage(item) && (item.layer === "CHARACTER" || item.layer === "MOUNT")
                 );
@@ -39,7 +39,7 @@ export function useElevationLabels(ready: boolean) {
                     const elevation = meta?.elevation ?? 0;
                     elevationMapRef.current.set(item.id, elevation);
 
-                    if (elevation > 0) {
+                    if (elevation !== 0) {
                         await ensureElevationLabel({
                             tokenId: item.id,
                             elevation: elevation,
