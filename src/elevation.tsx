@@ -13,6 +13,9 @@ function ElevationMenu() {
     const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
     const [unit, setUnit] = React.useState<string>("ft");
 
+    // Generation counter to track update operations - only latest applies
+    const updateGenerationRef = React.useRef(0);
+
     React.useEffect(() => {
         const init = async () => {
             // Get grid scale for unit label
@@ -60,6 +63,9 @@ function ElevationMenu() {
     const updateElevation = (newValue: number) => {
         setElevation(newValue);
 
+        // Increment generation to mark this as the latest update
+        const currentGeneration = ++updateGenerationRef.current;
+
         // Update items asynchronously
         OBR.scene.items.updateItems(selectedIds, (items) => {
             for (const item of items) {
@@ -68,9 +74,19 @@ function ElevationMenu() {
                 metadata[META_KEY].elevation = newValue;
             }
         }).then(async () => {
+            // Only proceed if this is still the latest update
+            if (currentGeneration !== updateGenerationRef.current) {
+                return; // Abort, newer update has been triggered
+            }
+
             // Update elevation labels
             const { ensureElevationLabel } = await import("./components/elevationLabels");
             for (const id of selectedIds) {
+                // Check again before each label update
+                if (currentGeneration !== updateGenerationRef.current) {
+                    return;
+                }
+
                 await ensureElevationLabel({
                     tokenId: id,
                     elevation: newValue,

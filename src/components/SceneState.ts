@@ -340,15 +340,32 @@ export async function setGroupActive(id: string, active: boolean): Promise<void>
 
 /**
  * Clear active status from all groups.
+ *
+ * UPDATED: Uses atomic batching to clear all groups at once instead of
+ * sequential awaits, reducing race condition window.
  */
 export async function clearAllGroupsActive(): Promise<void> {
     const groups = await getGroups();
+    const activeGroups = groups.filter(g => g.active);
 
-    const { updateGroupActive } = await import("./metadata");
-    for (const group of groups) {
-        if (group.active) {
-            await updateGroupActive(OBR, group.id, false);
-        }
+    if (activeGroups.length === 0) return;
+
+    // Collect all token IDs from all active groups
+    const { getTokensInGroup, batchUpdateMeta } = await import("./metadata");
+    const allTokenIds: string[] = [];
+
+    for (const group of activeGroups) {
+        const tokens = await getTokensInGroup(OBR, group.id);
+        allTokenIds.push(...tokens);
+    }
+
+    // Single batch update for all tokens in all active groups
+    if (allTokenIds.length > 0) {
+        const patches = allTokenIds.map(id => ({
+            id,
+            patch: { active: false }
+        }));
+        await batchUpdateMeta(OBR, patches);
     }
 }
 

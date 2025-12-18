@@ -3,9 +3,108 @@ import { clearRings, ensureRings, clearRingsFor } from "../components/rings";
 import type { RingConfig } from "./useRingState";
 import type { InitiativeItem } from "../components/InitiativeItem";
 
+/* ============================================================================
+   Ring Operation Queue - Prevents race conditions in ring updates
+   ============================================================================ */
+
+type RingOperation = {
+    key: string;
+    execute: () => Promise<void>;
+    sequenceNumber: number;
+};
+
+/**
+ * Manages queued ring operations with deduplication and sequence tracking.
+ * Ensures only the latest operation for each key executes and rejects stale operations.
+ */
+class RingOperationQueue {
+    private sequenceNumber = 0;
+    private lastProcessedSequence = -1;
+    private pendingOperations = new Map<string, RingOperation>();
+    private rafId: number | null = null;
+
+    /**
+     * Schedule a ring operation. If an operation for the same key already exists,
+     * it will be replaced (deduplication).
+     */
+    scheduleOperation(key: string, execute: () => Promise<void>): number {
+        const seq = ++this.sequenceNumber;
+
+        // Deduplicate: replace existing operation for this key
+        this.pendingOperations.set(key, {
+            key,
+            execute,
+            sequenceNumber: seq,
+        });
+
+        // Schedule batch execution if not already scheduled
+        if (this.rafId === null) {
+            this.rafId = requestAnimationFrame(() => {
+                this.executeBatch().catch(console.error);
+            });
+        }
+
+        return seq;
+    }
+
+    /**
+     * Check if a sequence number is stale (newer operations have been scheduled)
+     */
+    isStale(sequenceNumber: number): boolean {
+        return sequenceNumber < this.sequenceNumber;
+    }
+
+    /**
+     * Execute all pending operations in the queue
+     */
+    private async executeBatch() {
+        const ops = Array.from(this.pendingOperations.values());
+        this.pendingOperations.clear();
+        this.rafId = null;
+
+        // Execute operations in order
+        for (const op of ops) {
+            // Skip if this operation has been superseded
+            if (op.sequenceNumber <= this.lastProcessedSequence) {
+                continue;
+            }
+
+            try {
+                await op.execute();
+                this.lastProcessedSequence = op.sequenceNumber;
+            } catch (err) {
+                console.error(`Ring operation ${op.key} failed:`, err);
+                if (err instanceof Error) {
+                    console.error('Error stack:', err.stack);
+                }
+            }
+        }
+    }
+
+    /**
+     * Cancel all pending operations (used on cleanup)
+     */
+    cancelAll() {
+        if (this.rafId !== null) {
+            cancelAnimationFrame(this.rafId);
+            this.rafId = null;
+        }
+        this.pendingOperations.clear();
+    }
+}
+
+// Shared queue instance for all ring hooks
+const ringQueue = new RingOperationQueue();
+
+/* ============================================================================
+   Ring Management Hooks
+   ============================================================================ */
+
 /**
  * Hook specifically for managing global PC rings (shown during combat turns)
  * Updated to handle multiple active tokens in groups
+ *
+ * UPDATED: Uses RingOperationQueue to prevent stale operations
  */
 export function useGlobalRings(
     config: {
@@ -18,68 +117,19 @@ export function useGlobalRings(
     },
     ringConfig: RingConfig
 ) {
-    const rafIdRef = useRef<number | null>(null);
     const prevShouldShowRef = useRef<boolean>(false);
 
-    useEffect(() => {
-        if (!config.ready) return;
-
-        // Cancel any pending RAF
-        if (rafIdRef.current !== null) {
-            cancelAnimationFrame(rafIdRef.current);
-            rafIdRef.current = null;
-        }
-
-        const updateGlobalRings = async () => {
-            const shouldShow = config.showGlobalRings && config.started && config.active && config.playerCharacter;
-            const shouldShowChanged = shouldShow !== prevShouldShowRef.current;
-
-            // Only update rings if the show state changed or ring config changed
-            if (shouldShow) {
-                await ensureRings({
-                    tokenId: config.tokenId,
-                    movement: ringConfig.movement,
-                    attackRange: ringConfig.attackRange,
-                    moveAttached: false,
-                    rangeAttached: true,
-                    visible: true,
-                    variant: "normal",
-                    forceRecenter: shouldShowChanged, // Only recenter when transitioning to active
-                    movementColor: ringConfig.movementStyle.color,
-                    rangeColor: ringConfig.rangeStyle.color,
-                    movementWeight: ringConfig.movementStyle.weight,
-                    rangeWeight: ringConfig.rangeStyle.weight,
-                    movementPattern: ringConfig.movementStyle.pattern,
-                    rangePattern: ringConfig.rangeStyle.pattern,
-                    movementOpacity: ringConfig.movementStyle.opacity,
-                    rangeOpacity: ringConfig.rangeStyle.opacity,
-                });
-            } else if (prevShouldShowRef.current) {
-                // Only clear if we were previously showing rings
-                await clearRingsFor(config.tokenId, "normal");
-            }
-
-            prevShouldShowRef.current = shouldShow;
-        };
-
-        rafIdRef.current = requestAnimationFrame(() => {
-            updateGlobalRings().catch(console.error);
-            rafIdRef.current = null;
-        });
-
-        return () => {
-            if (rafIdRef.current !== null) {
-                cancelAnimationFrame(rafIdRef.current);
-                rafIdRef.current = null;
-            }
-        };
-    }, [
+    // Snapshot config and ringConfig to avoid closure issues
+    const configSnapshot = useMemo(() => config, [
         config.ready,
         config.started,
         config.active,
         config.playerCharacter,
         config.showGlobalRings,
         config.tokenId,
+    ]);
+
+    const ringConfigSnapshot = useMemo(() => ringConfig, [
         ringConfig.movement,
         ringConfig.attackRange,
         ringConfig.movementStyle.color,
@@ -92,10 +142,48 @@ export function useGlobalRings(
         ringConfig.rangeStyle.opacity,
     ]);
 
-    // Cleanup on unmount - only clear if this hook was managing the rings
+    useEffect(() => {
+        if (!configSnapshot.ready) return;
+
+        // Schedule using queue
+        ringQueue.scheduleOperation(
+            `global-${configSnapshot.tokenId}`,
+            async () => {
+                const shouldShow = configSnapshot.showGlobalRings && configSnapshot.started &&
+                                  configSnapshot.active && configSnapshot.playerCharacter;
+                const shouldShowChanged = shouldShow !== prevShouldShowRef.current;
+
+                if (shouldShow) {
+                    await ensureRings({
+                        tokenId: configSnapshot.tokenId,
+                        movement: ringConfigSnapshot.movement,
+                        attackRange: ringConfigSnapshot.attackRange,
+                        moveAttached: false,
+                        rangeAttached: true,
+                        visible: true,
+                        variant: "normal",
+                        forceRecenter: shouldShowChanged,
+                        movementColor: ringConfigSnapshot.movementStyle.color,
+                        rangeColor: ringConfigSnapshot.rangeStyle.color,
+                        movementWeight: ringConfigSnapshot.movementStyle.weight,
+                        rangeWeight: ringConfigSnapshot.rangeStyle.weight,
+                        movementPattern: ringConfigSnapshot.movementStyle.pattern,
+                        rangePattern: ringConfigSnapshot.rangeStyle.pattern,
+                        movementOpacity: ringConfigSnapshot.movementStyle.opacity,
+                        rangeOpacity: ringConfigSnapshot.rangeStyle.opacity,
+                    });
+                } else if (prevShouldShowRef.current) {
+                    await clearRingsFor(configSnapshot.tokenId, "normal");
+                }
+
+                prevShouldShowRef.current = shouldShow;
+            }
+        );
+    }, [configSnapshot, ringConfigSnapshot]);
+
+    // Cleanup on unmount
     useEffect(() => {
         return () => {
-            // Only clear if this component was managing global rings
             if (config.showGlobalRings) {
                 clearRingsFor(config.tokenId, "normal").catch(() => { });
             }
@@ -105,6 +193,8 @@ export function useGlobalRings(
 
 /**
  * Hook specifically for managing DM preview rings (independent toggle per token)
+ *
+ * UPDATED: Uses RingOperationQueue to prevent stale operations
  */
 export function useDmPreviewRings(
     config: {
@@ -114,58 +204,14 @@ export function useDmPreviewRings(
     },
     ringConfig: RingConfig
 ) {
-    const rafIdRef = useRef<number | null>(null);
-
-    useEffect(() => {
-        if (!config.ready) return;
-
-        // Cancel any pending RAF
-        if (rafIdRef.current !== null) {
-            cancelAnimationFrame(rafIdRef.current);
-            rafIdRef.current = null;
-        }
-
-        const updateDmRings = async () => {
-            if (config.showDmPreview) {
-                await ensureRings({
-                    tokenId: config.tokenId,
-                    movement: ringConfig.movement,
-                    attackRange: ringConfig.attackRange,
-                    moveAttached: false,
-                    rangeAttached: true,
-                    visible: false, // DM rings are always invisible to players
-                    variant: "dm",
-                    forceRecenter: false, // DM rings don't need recentering
-                    movementColor: ringConfig.movementStyle.color,
-                    rangeColor: ringConfig.rangeStyle.color,
-                    movementWeight: ringConfig.movementStyle.weight,
-                    rangeWeight: ringConfig.rangeStyle.weight,
-                    movementPattern: ringConfig.movementStyle.pattern,
-                    rangePattern: ringConfig.rangeStyle.pattern,
-                    movementOpacity: ringConfig.movementStyle.opacity,
-                    rangeOpacity: ringConfig.rangeStyle.opacity,
-                });
-            } else {
-                // Clear only this token's DM rings
-                await clearRingsFor(config.tokenId, "dm");
-            }
-        };
-
-        rafIdRef.current = requestAnimationFrame(() => {
-            updateDmRings().catch(console.error);
-            rafIdRef.current = null;
-        });
-
-        return () => {
-            if (rafIdRef.current !== null) {
-                cancelAnimationFrame(rafIdRef.current);
-                rafIdRef.current = null;
-            }
-        };
-    }, [
+    // Snapshot config and ringConfig
+    const configSnapshot = useMemo(() => config, [
         config.ready,
         config.showDmPreview,
         config.tokenId,
+    ]);
+
+    const ringConfigSnapshot = useMemo(() => ringConfig, [
         ringConfig.movement,
         ringConfig.attackRange,
         ringConfig.movementStyle.color,
@@ -178,7 +224,40 @@ export function useDmPreviewRings(
         ringConfig.rangeStyle.opacity,
     ]);
 
-    // Cleanup on unmount - only clear this token's DM rings
+    useEffect(() => {
+        if (!configSnapshot.ready) return;
+
+        // Schedule using queue
+        ringQueue.scheduleOperation(
+            `dm-${configSnapshot.tokenId}`,
+            async () => {
+                if (configSnapshot.showDmPreview) {
+                    await ensureRings({
+                        tokenId: configSnapshot.tokenId,
+                        movement: ringConfigSnapshot.movement,
+                        attackRange: ringConfigSnapshot.attackRange,
+                        moveAttached: false,
+                        rangeAttached: true,
+                        visible: false, // DM rings are always invisible to players
+                        variant: "dm",
+                        forceRecenter: false,
+                        movementColor: ringConfigSnapshot.movementStyle.color,
+                        rangeColor: ringConfigSnapshot.rangeStyle.color,
+                        movementWeight: ringConfigSnapshot.movementStyle.weight,
+                        rangeWeight: ringConfigSnapshot.rangeStyle.weight,
+                        movementPattern: ringConfigSnapshot.movementStyle.pattern,
+                        rangePattern: ringConfigSnapshot.rangeStyle.pattern,
+                        movementOpacity: ringConfigSnapshot.movementStyle.opacity,
+                        rangeOpacity: ringConfigSnapshot.rangeStyle.opacity,
+                    });
+                } else {
+                    await clearRingsFor(configSnapshot.tokenId, "dm");
+                }
+            }
+        );
+    }, [configSnapshot, ringConfigSnapshot]);
+
+    // Cleanup on unmount
     useEffect(() => {
         return () => {
             clearRingsFor(config.tokenId, "dm").catch(() => { });
@@ -190,6 +269,9 @@ export function useDmPreviewRings(
  * Centralized hook for managing rings for ALL initiative items
  * Manages rings based purely on active state, regardless of rendering/grouping
  * Call this at GMTable level with the complete flat list of all items
+ *
+ * UPDATED: Uses RingOperationQueue with two-phase clear-then-draw protocol
+ * to prevent race conditions during rapid state changes.
  */
 export function useCentralizedRings(
     items: InitiativeItem[],
@@ -200,121 +282,133 @@ export function useCentralizedRings(
     }
 ) {
     const prevActiveIdsRef = useRef<Set<string>>(new Set());
-    const rafIdRef = useRef<number | null>(null);
-    const itemsRef = useRef<InitiativeItem[]>(items);
+    const prevActiveStateKeyRef = useRef<string>('');
 
-    // Always keep items ref up to date
-    itemsRef.current = items;
+    // Snapshot config to avoid closure issues
+    const configSnapshot = useMemo(() => config, [
+        config.ready,
+        config.started,
+        config.showGlobalRings,
+    ]);
 
     // Create stable key for items based on active states
+    // ONLY changes when the actual set of active PC IDs changes
     const activeStateKey = useMemo(() => {
-        return items
+        const newKey = items
             .filter(item => item.playerCharacter && item.active)
             .map(item => item.id)
             .sort()
             .join(',');
-    }, [items]);
+
+        // Only update if actually changed
+        if (newKey !== prevActiveStateKeyRef.current) {
+            prevActiveStateKeyRef.current = newKey;
+        }
+        return prevActiveStateKeyRef.current;
+    }, [items.map(i => `${i.id}:${i.active}:${i.playerCharacter}`).join('|')]);
+
+    // Snapshot items when activeStateKey changes (not on every render)
+    const itemsSnapshot = useMemo(() => items, [activeStateKey]);
 
     useEffect(() => {
-        if (!config.ready) {
+        if (!configSnapshot.ready) {
             return;
         }
 
-        if (rafIdRef.current !== null) {
-            cancelAnimationFrame(rafIdRef.current);
-            rafIdRef.current = null;
-        }
+        // Schedule ring operation using queue (handles RAF internally)
+        const seq = ringQueue.scheduleOperation(
+            'centralized-rings',
+            async () => {
+                // Build state from snapshot
+                const shouldHaveRings = new Set<string>();
+                const itemMap = new Map<string, InitiativeItem>();
 
-        const updateRings = async () => {
-            const shouldHaveRings = new Set<string>();
-            const itemMap = new Map<string, InitiativeItem>();
-
-            // Build map and find all active player characters using current items
-            itemsRef.current.forEach(item => {
-                itemMap.set(item.id, item);
-                if (item.playerCharacter && item.active && config.started && config.showGlobalRings) {
-                    shouldHaveRings.add(item.id);
-                }
-            });
-
-            // Find newly active items (need rings drawn)
-            const toDraw: string[] = [];
-            shouldHaveRings.forEach(id => {
-                if (!prevActiveIdsRef.current.has(id)) {
-                    toDraw.push(id);
-                }
-            });
-
-            // Find newly inactive items (need rings cleared)
-            const toClear: string[] = [];
-            prevActiveIdsRef.current.forEach(id => {
-                if (!shouldHaveRings.has(id)) {
-                    toClear.push(id);
-                }
-            });
-
-            // Draw rings for newly active items
-            for (const id of toDraw) {
-                const item = itemMap.get(id);
-                if (!item) continue;
-
-                const ringConfig: RingConfig = {
-                    movement: item.movement ?? 30,
-                    attackRange: item.attackRange ?? 60,
-                    movementStyle: {
-                        color: item.movementColor ?? "#519e00",
-                        weight: item.movementWeight ?? 10,
-                        pattern: item.movementPattern ?? "dash",
-                        opacity: item.movementOpacity ?? 1,
-                    },
-                    rangeStyle: {
-                        color: item.rangeColor ?? "#fe4c50",
-                        weight: item.rangeWeight ?? 10,
-                        pattern: item.rangePattern ?? "dash",
-                        opacity: item.rangeOpacity ?? 1,
-                    },
-                };
-
-                await ensureRings({
-                    tokenId: id,
-                    movement: ringConfig.movement,
-                    attackRange: ringConfig.attackRange,
-                    moveAttached: false,
-                    rangeAttached: true,
-                    visible: true,
-                    variant: "normal",
-                    forceRecenter: true,
-                    movementColor: ringConfig.movementStyle.color,
-                    rangeColor: ringConfig.rangeStyle.color,
-                    movementWeight: ringConfig.movementStyle.weight,
-                    rangeWeight: ringConfig.rangeStyle.weight,
-                    movementPattern: ringConfig.movementStyle.pattern,
-                    rangePattern: ringConfig.rangeStyle.pattern,
-                    movementOpacity: ringConfig.movementStyle.opacity,
-                    rangeOpacity: ringConfig.rangeStyle.opacity,
+                itemsSnapshot.forEach(item => {
+                    itemMap.set(item.id, item);
+                    if (item.playerCharacter && item.active && configSnapshot.started && configSnapshot.showGlobalRings) {
+                        shouldHaveRings.add(item.id);
+                    }
                 });
+
+                // Find newly active items (need rings drawn)
+                const toDraw: string[] = [];
+                shouldHaveRings.forEach(id => {
+                    if (!prevActiveIdsRef.current.has(id)) {
+                        toDraw.push(id);
+                    }
+                });
+
+                // Find newly inactive items (need rings cleared)
+                const toClear: string[] = [];
+                prevActiveIdsRef.current.forEach(id => {
+                    if (!shouldHaveRings.has(id)) {
+                        toClear.push(id);
+                    }
+                });
+
+                // ===== PHASE 1: Clear rings for inactive items =====
+                await Promise.all(
+                    toClear.map(id => clearRingsFor(id, "normal"))
+                );
+
+                // Check if we're still current after clearing
+                if (ringQueue.isStale(seq)) {
+                    return; // Abort, newer operation scheduled
+                }
+
+                // ===== PHASE 2: Draw rings for active items =====
+                const drawPromises = toDraw.map(async id => {
+                    const item = itemMap.get(id);
+                    if (!item) return;
+
+                    const ringConfig: RingConfig = {
+                        movement: item.movement ?? 30,
+                        attackRange: item.attackRange ?? 60,
+                        movementStyle: {
+                            color: item.movementColor ?? "#519e00",
+                            weight: item.movementWeight ?? 10,
+                            pattern: item.movementPattern ?? "dash",
+                            opacity: item.movementOpacity ?? 1,
+                        },
+                        rangeStyle: {
+                            color: item.rangeColor ?? "#fe4c50",
+                            weight: item.rangeWeight ?? 10,
+                            pattern: item.rangePattern ?? "dash",
+                            opacity: item.rangeOpacity ?? 1,
+                        },
+                    };
+
+                    await ensureRings({
+                        tokenId: id,
+                        movement: ringConfig.movement,
+                        attackRange: ringConfig.attackRange,
+                        moveAttached: false,
+                        rangeAttached: true,
+                        visible: true,
+                        variant: "normal",
+                        forceRecenter: true,
+                        movementColor: ringConfig.movementStyle.color,
+                        rangeColor: ringConfig.rangeStyle.color,
+                        movementWeight: ringConfig.movementStyle.weight,
+                        rangeWeight: ringConfig.rangeStyle.weight,
+                        movementPattern: ringConfig.movementStyle.pattern,
+                        rangePattern: ringConfig.rangeStyle.pattern,
+                        movementOpacity: ringConfig.movementStyle.opacity,
+                        rangeOpacity: ringConfig.rangeStyle.opacity,
+                    });
+                });
+
+                await Promise.all(drawPromises);
+
+                // Update tracking only if we're still current
+                if (!ringQueue.isStale(seq)) {
+                    prevActiveIdsRef.current = shouldHaveRings;
+                }
             }
+        );
 
-            // Clear rings for items that became inactive
-            for (const id of toClear) {
-                await clearRingsFor(id, "normal");
-            }
-
-            prevActiveIdsRef.current = shouldHaveRings;
-        };
-
-        rafIdRef.current = requestAnimationFrame(() => {
-            updateRings().catch(console.error);
-            rafIdRef.current = null;
-        });
-
-        return () => {
-            if (rafIdRef.current !== null) {
-                cancelAnimationFrame(rafIdRef.current);
-                rafIdRef.current = null;
-            }
-        };
-    }, [activeStateKey, config.ready, config.started, config.showGlobalRings]);
+        // No cleanup needed - queue handles RAF cancellation
+    }, [activeStateKey, configSnapshot, itemsSnapshot]);
 
     // Cleanup on unmount
     useEffect(() => {

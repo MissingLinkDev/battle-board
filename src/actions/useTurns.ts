@@ -5,6 +5,67 @@ import { setGroupActive, clearAllGroupsActive, getGroups } from "../components/S
 import type { InitiativeItem } from "../components/InitiativeItem";
 import type { Group } from "../components/SceneState";
 
+/* ============================================================================
+   Turn Cycling Lock - Prevents concurrent turn operations
+   ============================================================================ */
+
+/**
+ * Async mutex for turn cycling operations with state version tracking.
+ * Ensures only one turn operation executes at a time and provides version
+ * validation to detect stale state mutations.
+ */
+class TurnCyclingLock {
+    private locked = false;
+    private stateVersion = 0;
+    private waitQueue: Array<() => void> = [];
+
+    /**
+     * Execute an operation exclusively with version tracking.
+     * Only one operation can run at a time; others wait in queue.
+     */
+    async executeExclusive<T>(operation: (version: number) => Promise<T>): Promise<T | undefined> {
+        // Wait for lock to be available
+        while (this.locked) {
+            await new Promise<void>(resolve => {
+                this.waitQueue.push(resolve);
+            });
+        }
+
+        this.locked = true;
+        const currentVersion = ++this.stateVersion;
+
+        try {
+            return await operation(currentVersion);
+        } finally {
+            this.locked = false;
+            // Wake up next waiter
+            const next = this.waitQueue.shift();
+            if (next) next();
+        }
+    }
+
+    /**
+     * Check if a version number is still current (no newer operations have started)
+     */
+    isVersionCurrent(version: number): boolean {
+        return version === this.stateVersion;
+    }
+
+    /**
+     * Get current lock state (for debugging)
+     */
+    isLocked(): boolean {
+        return this.locked;
+    }
+}
+
+// Shared lock instance for turn cycling
+const turnLock = new TurnCyclingLock();
+
+/* ============================================================================
+   Turn Management
+   ============================================================================ */
+
 // Helper type for turn management
 type TurnItem = {
     type: 'group';
@@ -187,16 +248,14 @@ export function useTurns(
     setStarted: (b: boolean) => void,
     saveSceneState: (started: boolean, round: number) => Promise<void>,
 ) {
-    // Prevent double-clicks with a simple lock
-    let isProcessing = false;
-
     const handleStart = async () => {
-        if (isProcessing) return;
-        isProcessing = true;
-
-        try {
+        await turnLock.executeExclusive(async (version) => {
+            // Fetch state under lock
             const state = await getCurrentInitiativeState();
             if (state.turnOrder.length === 0) return;
+
+            // Verify version is still current
+            if (!turnLock.isVersionCurrent(version)) return;
 
             // Set first item as active
             const allItemIds = Array.from(state.items.keys());
@@ -206,18 +265,17 @@ export function useTurns(
             setRound(1);
             setStarted(true);
             await saveSceneState(true, 1);
-        } finally {
-            isProcessing = false;
-        }
+        });
     };
 
     const handleEnd = async () => {
-        if (isProcessing) return;
-        isProcessing = true;
-
-        try {
+        await turnLock.executeExclusive(async (version) => {
+            // Fetch state under lock
             const state = await getCurrentInitiativeState();
             const allItemIds = Array.from(state.items.keys());
+
+            // Verify version is still current
+            if (!turnLock.isVersionCurrent(version)) return;
 
             // Clear all active states
             await setActiveTurn(null, allItemIds, setRows);
@@ -227,16 +285,14 @@ export function useTurns(
             setRound(0);
             setStarted(false);
             await saveSceneState(false, 0);
-        } finally {
-            isProcessing = false;
-        }
+        });
     };
 
     const handleNext = async () => {
-        if (isProcessing || !started) return;
-        isProcessing = true;
+        if (!started) return;
 
-        try {
+        await turnLock.executeExclusive(async (version) => {
+            // Fetch state under lock
             const state = await getCurrentInitiativeState();
             if (state.turnOrder.length === 0) return;
 
@@ -245,14 +301,14 @@ export function useTurns(
             let shouldIncrementRound = false;
 
             if (state.activeIndex === -1) {
-                // No active item, start from beginning
                 nextIndex = 0;
             } else {
-                // Move to next
                 nextIndex = (state.activeIndex + 1) % state.turnOrder.length;
-                // Check if we wrapped around
                 shouldIncrementRound = (nextIndex === 0);
             }
+
+            // Verify version before mutation
+            if (!turnLock.isVersionCurrent(version)) return;
 
             // Set the new active turn
             const allItemIds = Array.from(state.items.keys());
@@ -264,16 +320,14 @@ export function useTurns(
                 setRound(newRound);
                 await saveSceneState(true, newRound);
             }
-        } finally {
-            isProcessing = false;
-        }
+        });
     };
 
     const handlePrev = async () => {
-        if (isProcessing || !started) return;
-        isProcessing = true;
+        if (!started) return;
 
-        try {
+        await turnLock.executeExclusive(async (version) => {
+            // Fetch state under lock
             const state = await getCurrentInitiativeState();
             if (state.turnOrder.length === 0) return;
 
@@ -282,16 +336,16 @@ export function useTurns(
             let shouldDecrementRound = false;
 
             if (state.activeIndex === -1) {
-                // No active item, go to last
                 prevIndex = state.turnOrder.length - 1;
             } else if (state.activeIndex === 0) {
-                // At beginning, wrap to end
                 prevIndex = state.turnOrder.length - 1;
                 shouldDecrementRound = true;
             } else {
-                // Move to previous
                 prevIndex = state.activeIndex - 1;
             }
+
+            // Verify version before mutation
+            if (!turnLock.isVersionCurrent(version)) return;
 
             // Set the new active turn
             const allItemIds = Array.from(state.items.keys());
@@ -303,9 +357,7 @@ export function useTurns(
                 setRound(newRound);
                 await saveSceneState(true, newRound);
             }
-        } finally {
-            isProcessing = false;
-        }
+        });
     };
 
     return { handleStart, handleEnd, handleNext, handlePrev };

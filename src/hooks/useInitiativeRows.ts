@@ -11,6 +11,7 @@ export function useInitiativeRows() {
     // local edit bookkeeping for diff writer
     const localEditRef = useRef(false);
     const prevRowsRef = useRef<InitiativeItem[]>([]);
+    const diffGenerationRef = useRef(0); // Track diff generation to prevent stale writes
 
     // Scene → UI sync
     useEffect(() => {
@@ -60,19 +61,28 @@ export function useInitiativeRows() {
     }, []);
 
     // Diff-writer (rows → metadata) and auto resort when initiative changes
+    // UPDATED: Uses generation counter to prevent stale writes
     useEffect(() => {
         if (!localEditRef.current) {
             prevRowsRef.current = rows;
             return;
         }
+
+        // Increment generation and snapshot state BEFORE async work
+        const currentGeneration = ++diffGenerationRef.current;
+        const prevSnapshot = prevRowsRef.current;
+        const currentSnapshot = rows;
+
+        // Update prevRowsRef IMMEDIATELY to prevent stale diffs
+        prevRowsRef.current = rows;
+
         (async () => {
-            const prev = prevRowsRef.current;
-            const prevById = new Map(prev.map((r) => [r.id, r]));
+            const prevById = new Map(prevSnapshot.map((r) => [r.id, r]));
 
             const patches: { id: string; patch: Partial<MetaShape> }[] = [];
             let initiativeChanged = false;
 
-            for (const now of rows) {
+            for (const now of currentSnapshot) {
                 const before = prevById.get(now.id);
                 if (!before) continue;
                 const patch = metaPatchFromRowDiff(before, now);
@@ -80,15 +90,23 @@ export function useInitiativeRows() {
                 if (Object.keys(patch).length) patches.push({ id: now.id, patch });
             }
 
+            // Check if we're still current before applying patches
+            if (currentGeneration !== diffGenerationRef.current) {
+                return; // Abort, newer edit has started
+            }
+
             if (patches.length) {
                 await batchUpdateMeta(OBR, patches);
             }
+
             if (initiativeChanged) {
                 setRows((s) => sortByInitiativeDesc(s));
             }
 
-            localEditRef.current = false;
-            prevRowsRef.current = rows;
+            // Only clear localEditRef if we're still the current generation
+            if (currentGeneration === diffGenerationRef.current) {
+                localEditRef.current = false;
+            }
         })().catch(console.error);
     }, [rows]);
 
