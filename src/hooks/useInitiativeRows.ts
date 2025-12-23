@@ -16,8 +16,6 @@ export function useInitiativeRows() {
     // Scene → UI sync
     useEffect(() => {
         const handle = async (items: Item[]) => {
-            // IMPORTANT: Don't ignore scene updates when we have local edits for active state changes
-            // Only ignore for other types of changes
             const wasLocalEdit = localEditRef.current;
 
             const list: InitiativeItem[] = [];
@@ -28,32 +26,35 @@ export function useInitiativeRows() {
             }
             const sorted = sortByInitiativeDesc(list);
 
-            // If this was a local edit, we need to be more careful about what we update
+            // CRITICAL: Always accept active state changes from OBR, even during local edits
+            // This ensures React state never gets out of sync with turn cycling
             if (wasLocalEdit) {
-                // Check if this update contains active state changes that we need to accept
-                const prevActiveIds = new Set(prevRowsRef.current.filter(r => r.active).map(r => r.id));
-                const newActiveIds = new Set(sorted.filter(r => r.active).map(r => r.id));
+                // Merge: Take active/visible state from OBR, preserve local edits for other fields
+                const prevById = new Map(prevRowsRef.current.map(r => [r.id, r]));
+                const merged = sorted.map(newRow => {
+                    const prevRow = prevById.get(newRow.id);
+                    if (!prevRow) return newRow;
 
-                // If active state changed in the scene, we should accept it
-                const activeStateChanged = prevActiveIds.size !== newActiveIds.size ||
-                    [...prevActiveIds].some(id => !newActiveIds.has(id)) ||
-                    [...newActiveIds].some(id => !prevActiveIds.has(id));
-
-                if (activeStateChanged) {
-                    // Active state changed - accept the scene update
-                    setRows(sorted);
-                    prevRowsRef.current = sorted;
-                    localEditRef.current = false;
-                } else {
-                    // No active state change - keep our local edit flag
-                    // This prevents overwriting local edits like HP changes
-                }
+                    // Always sync active and visible state from scene
+                    // Preserve local edits for HP and other fields
+                    return {
+                        ...prevRow,
+                        active: newRow.active,      // ALWAYS from OBR
+                        visible: newRow.visible,    // ALWAYS from OBR
+                        initiative: newRow.initiative, // Sync initiative changes
+                        // Other fields from prevRow (preserves local edits)
+                    };
+                });
+                setRows(merged);
+                prevRowsRef.current = merged;
             } else {
-                // Not a local edit - accept all scene changes
+                // Not a local edit - accept all changes
                 setRows(sorted);
                 prevRowsRef.current = sorted;
-                localEditRef.current = false;
             }
+
+            // Clear local edit flag after processing
+            localEditRef.current = false;
         };
 
         OBR.scene.items.getItems().then(handle);

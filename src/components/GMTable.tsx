@@ -21,10 +21,10 @@ import SettingsRounded from "@mui/icons-material/SettingsRounded";
 import type { InitiativeItem } from "./InitiativeItem";
 import type { Group, InitiativeSettings } from "./SceneState";
 import type { CMToken } from "./tokens";
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
 import { deleteGroup } from "./SceneState";
 import StopRounded from "@mui/icons-material/StopRounded";
-import { useCentralizedRings } from "../hooks/useRingsManager";
+import { useRingCoordinatorCleanup, ringCoordinator } from "../hooks/useRingCoordinator";
 
 type Props = {
     items: InitiativeItem[];
@@ -91,12 +91,56 @@ export default function GmTable({
 
     const gmColCount = 3 + (showAC ? 1 : 0) + (showHP ? 2 : 0) + (showConc ? 1 : 0) + (showDMR ? 1 : 0);
 
-    // Centralized ring management for ALL items (grouped and ungrouped)
-    useCentralizedRings(items, {
-        started,
-        showGlobalRings: globalSettings?.showRangeRings ?? false,
-        ready,
-    });
+    // Ring coordinator cleanup when initiative ends
+    useRingCoordinatorCleanup(started, ready);
+
+    // Update ring coordinator's global settings when they change
+    useEffect(() => {
+        ringCoordinator.setGlobalSettings({
+            showGlobalRings: globalSettings?.showRangeRings ?? false,
+            started,
+        });
+    }, [globalSettings?.showRangeRings, started]);
+
+    // Create stable dependency key for ring-relevant properties
+    const ringStateKey = useMemo(() => {
+        return items
+            .map(i => `${i.id}:${i.active}:${i.playerCharacter}:${i.movement}:${i.attackRange}:${i.movementColor}:${i.rangeColor}:${i.movementWeight}:${i.rangeWeight}:${i.movementPattern}:${i.rangePattern}:${i.movementOpacity}:${i.rangeOpacity}`)
+            .join('|');
+    }, [items]);
+
+    // Update rings when active items or their properties change
+    useEffect(() => {
+        if (!started || !ready) return;
+
+        // Build list of active PC token IDs and their ring configs
+        const activeTokenIds: string[] = [];
+        const ringConfigs = new Map();
+
+        for (const item of items) {
+            if (item.active && item.playerCharacter) {
+                activeTokenIds.push(item.id);
+                ringConfigs.set(item.id, {
+                    movement: item.movement ?? 30,
+                    attackRange: item.attackRange ?? 60,
+                    movementStyle: {
+                        color: item.movementColor ?? "#519e00",
+                        weight: item.movementWeight ?? 10,
+                        pattern: item.movementPattern ?? "dash",
+                        opacity: item.movementOpacity ?? 1,
+                    },
+                    rangeStyle: {
+                        color: item.rangeColor ?? "#fe4c50",
+                        weight: item.rangeWeight ?? 10,
+                        pattern: item.rangePattern ?? "dash",
+                        opacity: item.rangeOpacity ?? 1,
+                    },
+                });
+            }
+        }
+
+        ringCoordinator.setActiveTokens(activeTokenIds, ringConfigs);
+    }, [ringStateKey, started, ready]);
 
     const getActiveIndex = (renderItems: RenderItem[]) => {
         return renderItems.findIndex((item) => {

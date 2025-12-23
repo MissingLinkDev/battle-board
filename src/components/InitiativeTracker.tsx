@@ -17,7 +17,7 @@ import { useTurns } from "../actions/useTurns";
 import { removeFromInitiative as removeAction } from "../actions/removeFromInitiative";
 import { useAddAll } from "../actions/useAddAll";
 import { registerInitiativeContextMenu } from "./initiativeMenu";
-import { useGlobalRingCleanup } from "../hooks/useRingsManager";
+import { useRingCoordinatorCleanup } from "../hooks/useRingCoordinator";
 import { useConcentrationNotifications } from "../hooks/useConcentrationNotifications";
 import { useElevationLabels } from "../hooks/useElevationLabels";
 
@@ -48,7 +48,7 @@ export function InitiativeTracker() {
         toggleExpanded,
     } = useInitiativeState();
 
-    useGlobalRingCleanup(started, ready);
+    useRingCoordinatorCleanup(started, ready);
     useElevationLabels(ready);
     const { showHealthColumn } = useHealthLogic(settings);
     const { checks, dismiss } = useConcentrationNotifications();

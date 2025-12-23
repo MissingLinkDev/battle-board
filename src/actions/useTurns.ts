@@ -234,6 +234,7 @@ async function setActiveTurn(
     });
 
     // Update local state to match
+    // Ring updates will be handled by GMTable's effect watching the items array
     setRows(prev => prev.map(row => ({
         ...row,
         active: updates[row.id] || false
