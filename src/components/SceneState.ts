@@ -3,6 +3,7 @@ import { getPluginId } from "../getPluginId";
 import { deriveGroupsFromItems, META_KEY, batchUpdateMeta } from "./metadata";
 
 export const SCENE_META_KEY = getPluginId("sceneState");
+export const ROOM_META_KEY = getPluginId("roomSettings");
 
 /** New unified health mode for what players can see */
 export type HealthMode = "none" | "status" | "numbers";
@@ -93,12 +94,6 @@ export const DEFAULT_SETTINGS: InitiativeSettings = {
     showConcentration: false,
 };
 
-const DEFAULT_SCENE_STATE: SceneState = {
-    started: false,
-    round: 0,
-    settings: DEFAULT_SETTINGS,
-};
-
 /** Apply backward-compatible migrations to a settings object */
 function migrateSettings(incoming: Partial<InitiativeSettings> | undefined): InitiativeSettings {
     // Start from defaults then overlay incoming
@@ -134,6 +129,31 @@ function migrateSettings(incoming: Partial<InitiativeSettings> | undefined): Ini
 
     return merged;
 }
+
+// ========== ROOM METADATA FUNCTIONS ==========
+
+/**
+ * Read settings from room metadata.
+ * Room metadata persists settings across all scenes in the room.
+ */
+export async function readRoomSettings(): Promise<InitiativeSettings | null> {
+    const meta = await OBR.room.getMetadata();
+    const raw = meta[ROOM_META_KEY] as InitiativeSettings | undefined;
+    if (!raw) return null;
+    return migrateSettings(raw);
+}
+
+/**
+ * Save settings to room metadata.
+ * This makes settings persist across all scenes in the room.
+ */
+export async function saveRoomSettings(settings: InitiativeSettings): Promise<void> {
+    await OBR.room.setMetadata({
+        [ROOM_META_KEY]: settings
+    });
+}
+
+// ========== SCENE METADATA MIGRATION ==========
 
 /**
  * Migrate old scene-metadata-based groups to token-based groups.
@@ -193,79 +213,116 @@ async function migrateOldGroupsToTokens(oldGroups: any[]): Promise<void> {
 export async function readSceneState(): Promise<SceneState | null> {
     const meta = await OBR.scene.getMetadata();
     const raw = meta[SCENE_META_KEY] as any;
-    if (!raw) return null;
 
     // Check for old groups and migrate if found
-    const oldGroups = raw.groups || raw.encounters?.groups || raw.encounters;
-    if (oldGroups && Array.isArray(oldGroups) && oldGroups.length > 0) {
-        // Run migration asynchronously (don't block the read)
-        migrateOldGroupsToTokens(oldGroups).catch(err => {
-            console.error("[Migration] Failed to migrate old groups:", err);
-        });
+    if (raw) {
+        const oldGroups = raw.groups || raw.encounters?.groups || raw.encounters;
+        if (oldGroups && Array.isArray(oldGroups) && oldGroups.length > 0) {
+            // Run migration asynchronously (don't block the read)
+            migrateOldGroupsToTokens(oldGroups).catch(err => {
+                console.error("[Migration] Failed to migrate old groups:", err);
+            });
+        }
     }
 
+    // Always get settings from room metadata (room-level persistence)
+    const roomSettings = await readRoomSettings();
+    let settings: InitiativeSettings;
+
+    if (roomSettings) {
+        // Room has settings - use them
+        settings = roomSettings;
+    } else if (raw?.settings) {
+        // No room settings but scene has settings - migrate them to room
+        settings = migrateSettings(raw.settings);
+        // Save to room metadata for future use (fire and forget)
+        saveRoomSettings(settings).catch(err => {
+            console.warn("[Migration] Failed to migrate scene settings to room:", err);
+        });
+    } else {
+        // No settings anywhere - use defaults
+        settings = DEFAULT_SETTINGS;
+    }
+
+    // If we have no scene state and no room settings, return null
+    if (!raw && !roomSettings) return null;
+
     return {
-        started: !!raw.started,
-        round: typeof raw.round === "number" ? raw.round : 0,
-        settings: migrateSettings(raw.settings),
+        started: raw?.started ?? false,
+        round: typeof raw?.round === "number" ? raw.round : 0,
+        settings,
     };
 }
 
 export async function saveSceneState(patch: Partial<SceneState>) {
-    // 1) read current scene metadata
-    const prev = await OBR.scene.getMetadata();
-    // 2) read current scene-state value (or defaults)
-    const current = (prev[SCENE_META_KEY] as SceneState) ?? DEFAULT_SCENE_STATE;
-
-    // 3) deep-merge settings only when provided
-    let nextSettings = current.settings;
+    // Settings are saved to room metadata (room-level persistence)
     if (patch.settings !== undefined) {
-        nextSettings = migrateSettings({
-            ...current.settings,
+        // Get current room settings to merge with
+        const currentRoomSettings = await readRoomSettings();
+        const nextSettings = migrateSettings({
+            ...(currentRoomSettings ?? DEFAULT_SETTINGS),
             ...patch.settings,
         });
+        await saveRoomSettings(nextSettings);
     }
 
-    const next: SceneState = {
-        started: patch.started !== undefined ? patch.started : current.started,
-        round: patch.round !== undefined ? patch.round : current.round,
-        settings: nextSettings,
-    };
+    // Only save started/round to scene metadata (scene-specific state)
+    if (patch.started !== undefined || patch.round !== undefined) {
+        const prev = await OBR.scene.getMetadata();
+        const current = (prev[SCENE_META_KEY] as any) ?? {};
 
-    // 4) write back the whole metadata object
-    await OBR.scene.setMetadata({
-        ...prev,
-        [SCENE_META_KEY]: next,
-    });
+        const next = {
+            started: patch.started ?? current.started ?? false,
+            round: patch.round ?? current.round ?? 0,
+        };
+
+        await OBR.scene.setMetadata({
+            ...prev,
+            [SCENE_META_KEY]: next,
+        });
+    }
 }
 
 export function onSceneStateChange(cb: (state: SceneState | null) => void) {
-    // Fire once immediately
-    OBR.scene.getMetadata().then((meta) => {
-        const raw = meta[SCENE_META_KEY] as SceneState | undefined;
-        if (raw) {
-            cb({
-                started: !!raw.started,
-                round: typeof raw.round === "number" ? raw.round : 0,
-                settings: migrateSettings(raw.settings),
+    // Helper to build state from scene + room metadata
+    const buildState = async (raw: any): Promise<SceneState | null> => {
+        // Always get settings from room metadata
+        const roomSettings = await readRoomSettings();
+        let settings: InitiativeSettings;
+
+        if (roomSettings) {
+            settings = roomSettings;
+        } else if (raw?.settings) {
+            // No room settings but scene has settings - migrate them
+            settings = migrateSettings(raw.settings);
+            saveRoomSettings(settings).catch(err => {
+                console.warn("[Migration] Failed to migrate scene settings to room:", err);
             });
         } else {
-            cb(null);
+            settings = DEFAULT_SETTINGS;
         }
+
+        if (!raw && !roomSettings) return null;
+
+        return {
+            started: raw?.started ?? false,
+            round: typeof raw?.round === "number" ? raw.round : 0,
+            settings,
+        };
+    };
+
+    // Fire once immediately
+    OBR.scene.getMetadata().then(async (meta) => {
+        const raw = meta[SCENE_META_KEY] as any;
+        const state = await buildState(raw);
+        cb(state);
     });
 
     // Subscribe to future changes
-    return OBR.scene.onMetadataChange((meta) => {
-        const raw = meta[SCENE_META_KEY] as SceneState | undefined;
-        if (raw) {
-            cb({
-                started: !!raw.started,
-                round: typeof raw.round === "number" ? raw.round : 0,
-                settings: migrateSettings(raw.settings),
-            });
-        } else {
-            cb(null);
-        }
+    return OBR.scene.onMetadataChange(async (meta) => {
+        const raw = meta[SCENE_META_KEY] as any;
+        const state = await buildState(raw);
+        cb(state);
     });
 }
 

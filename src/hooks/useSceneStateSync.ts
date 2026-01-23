@@ -6,6 +6,7 @@ import {
     saveSceneState,
     DEFAULT_SETTINGS,
     getGroups,
+    ROOM_META_KEY,
     type SceneState,
     type InitiativeSettings,
     type Group,
@@ -28,11 +29,22 @@ export function useSceneStateSync() {
         };
 
         readSceneState().then((s) => !unmounted && apply(s)).catch(console.error);
-        const unsub = onSceneStateChange(apply);
+        const unsubScene = onSceneStateChange(apply);
+
+        // Listen for room metadata changes (settings are stored at room level)
+        const unsubRoom = OBR.room.onMetadataChange((meta) => {
+            if (unmounted) return;
+            const raw = meta[ROOM_META_KEY] as InitiativeSettings | undefined;
+            if (raw) {
+                // Merge with defaults to handle any missing fields
+                setSettings(() => ({ ...DEFAULT_SETTINGS, ...raw }));
+            }
+        });
 
         return () => {
             unmounted = true;
-            unsub();
+            unsubScene();
+            unsubRoom();
         };
     }, []);
 
