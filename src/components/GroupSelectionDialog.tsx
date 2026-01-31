@@ -7,6 +7,8 @@ import Button from "@mui/material/Button";
 import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
 import FormControl from "@mui/material/FormControl";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Checkbox from "@mui/material/Checkbox";
 import TextField from "@mui/material/TextField";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
@@ -19,7 +21,7 @@ type Props = {
     groups: Group[];
     currentGroupId?: string | null;
     onSelectGroup: (groupId: string) => void;
-    onCreateGroup: (name: string) => void;
+    onCreateGroup: (name: string, staged: boolean) => void;
     onRemoveFromGroup?: () => void;
 };
 
@@ -34,12 +36,14 @@ export function GroupSelectionDialog({
 }: Props) {
     const [showCreateForm, setShowCreateForm] = useState(false);
     const [newGroupName, setNewGroupName] = useState("");
+    const [createAsStaged, setCreateAsStaged] = useState(false);
 
     const handleCreateSubmit = () => {
         const trimmed = newGroupName.trim();
         if (trimmed) {
-            onCreateGroup(trimmed);
+            onCreateGroup(trimmed, createAsStaged);
             setNewGroupName("");
+            setCreateAsStaged(false);
             setShowCreateForm(false);
             onClose();
         }
@@ -47,6 +51,7 @@ export function GroupSelectionDialog({
 
     const handleCancel = () => {
         setNewGroupName("");
+        setCreateAsStaged(false);
         setShowCreateForm(false);
         onClose();
     };
@@ -100,6 +105,17 @@ export function GroupSelectionDialog({
                                     handleCreateSubmit();
                                 }
                             }}
+                        />
+                        <FormControlLabel
+                            control={
+                                <Checkbox
+                                    checked={createAsStaged}
+                                    onChange={(e) => setCreateAsStaged(e.target.checked)}
+                                    size="small"
+                                />
+                            }
+                            label="Create as Staged"
+                            sx={{ mt: 1 }}
                         />
                     </Box>
                 ) : (

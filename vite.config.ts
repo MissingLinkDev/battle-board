@@ -8,7 +8,8 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: 'index.html',
-        elevation: 'elevation.html'
+        elevation: 'elevation.html',
+        groupmodal: 'groupmodal.html',
       }
     }
   },

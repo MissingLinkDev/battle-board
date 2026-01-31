@@ -350,7 +350,7 @@ export async function getGroups(): Promise<Group[]> {
  * Create a new empty group (no tokens yet).
  * Returns a group ID that can be used to add tokens.
  */
-export async function createGroup(name: string, initiative: number = 0): Promise<Group> {
+export async function createGroup(name: string, initiative: number = 0, staged: boolean = false): Promise<Group> {
     const id = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
     // Return a "virtual" group that will exist once tokens are added
@@ -359,7 +359,7 @@ export async function createGroup(name: string, initiative: number = 0): Promise
         name: name.trim() || "New Group",
         active: false,
         initiative,
-        staged: false,
+        staged,
     };
 }
 

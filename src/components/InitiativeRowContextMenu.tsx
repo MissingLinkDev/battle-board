@@ -8,7 +8,7 @@ import DeleteForeverRounded from "@mui/icons-material/DeleteForeverRounded";
 import OBR from "@owlbear-rodeo/sdk";
 import type { InitiativeItem } from "./InitiativeItem";
 import type { Group, InitiativeSettings } from "./SceneState";
-import { addTokenToGroup, removeTokenFromGroup, getTokensInGroup, updateTokenVisibility } from "./metadata";
+import { addTokenToGroup, removeTokenFromGroup, getTokensInGroup, updateTokenVisibility, updateGroupStaged } from "./metadata";
 import { createGroup, deleteGroup } from "./SceneState";
 import { GroupSelectionDialog } from "./GroupSelectionDialog";
 
@@ -68,19 +68,27 @@ export function InitiativeRowContextMenu({
         }
     };
 
-    const handleCreateGroup = async (name: string) => {
+    const handleCreateGroup = async (name: string, staged: boolean) => {
         try {
             // Create group with the current row's initiative as the default
-            const group = await createGroup(name, row.initiative);
+            const group = await createGroup(name, row.initiative, staged);
 
             // Add token to the new group, passing the group name and initiative
             await addTokenToGroup(OBR, row.id, group.id, group.name, group.initiative);
+
+            // If created as staged, update the group's staged status
+            if (staged) {
+                await updateGroupStaged(OBR, group.id, true);
+                if (globalSettings.groupStagingControlsVisibility) {
+                    await updateTokenVisibility(OBR, row.id, false);
+                }
+            }
 
             // Update local state for immediate UI feedback
             onChange({
                 groupId: group.id,
                 groupName: group.name,
-                // Initiative should already match since we created the group with this token's initiative
+                groupStaged: staged,
             });
         } catch (error) {
             console.error("Failed to create group:", error);

@@ -233,6 +233,7 @@ export function InitiativeTracker() {
                     />
                 </Box>
             )}
+
         </Box>
     );
 }
