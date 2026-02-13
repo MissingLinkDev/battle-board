@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef, useCallback } from "react";
 import Box from "@mui/material/Box";
 import Collapse from "@mui/material/Collapse";
 import Divider from "@mui/material/Divider";
@@ -26,6 +26,7 @@ import type { Group } from "./SceneState";
 import { useContextMenu } from "../hooks/useContextMenu";
 import { useHPEditing } from "../hooks/useHPEditing";
 import { InitiativeRowContextMenu } from "./InitiativeRowContextMenu";
+import { focusToken } from "./focusToken";
 
 type RowSettings = {
     showMovementRange: boolean;
@@ -142,15 +143,37 @@ export default function InitiativeRow({
         bubble({ dmPreview: next });
     };
 
+    // Double-click to focus viewport on token; single-click still toggles expand
+    const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const handleRowClick = useCallback(() => {
+        if (clickTimerRef.current !== null) {
+            clearTimeout(clickTimerRef.current);
+            clickTimerRef.current = null;
+            return;
+        }
+        clickTimerRef.current = setTimeout(() => {
+            clickTimerRef.current = null;
+            onToggleExpand?.();
+            onRequestActivate?.();
+        }, 250);
+    }, [onToggleExpand, onRequestActivate]);
+
+    const handleRowDoubleClick = useCallback(() => {
+        if (clickTimerRef.current !== null) {
+            clearTimeout(clickTimerRef.current);
+            clickTimerRef.current = null;
+        }
+        focusToken(row.id, tokens);
+    }, [row.id, tokens]);
+
     return (
         <>
             <TableRow
                 hover
                 selected={!!row.active}
-                onClick={() => {
-                    onToggleExpand?.();
-                    onRequestActivate?.();
-                }}
+                onClick={handleRowClick}
+                onDoubleClick={handleRowDoubleClick}
                 onContextMenu={handleContextMenu}
                 sx={{
                     cursor: "context-menu",

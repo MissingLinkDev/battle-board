@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Box from "@mui/material/Box";
 import Collapse from "@mui/material/Collapse";
 import IconButton from "@mui/material/IconButton";
@@ -20,6 +20,7 @@ import { useHPEditing } from "../hooks/useHPEditing";
 import { CommitNumberField } from "./CommitFields";
 import type { CMToken } from "./tokens";
 import type { InitiativeSettings } from "./SceneState";
+import { focusToken } from "./focusToken";
 
 type Props = {
     row: InitiativeItem;
@@ -128,16 +129,38 @@ export default function PlayerRow({
     const isActive = row.active;
     const computedShowHealthColumn = showHealthColumn ?? healthInfo.showColumn;
 
-    const handleToggleOpen = () => {
-        setOpen(!open);
-    };
+    // Double-click to focus viewport on token; single-click still toggles expand
+    const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const handleRowClick = useCallback(() => {
+        if (!settings.showDistances) return;
+
+        if (clickTimerRef.current !== null) {
+            clearTimeout(clickTimerRef.current);
+            clickTimerRef.current = null;
+            return;
+        }
+        clickTimerRef.current = setTimeout(() => {
+            clickTimerRef.current = null;
+            setOpen((prev) => !prev);
+        }, 250);
+    }, [settings.showDistances]);
+
+    const handleRowDoubleClick = useCallback(() => {
+        if (clickTimerRef.current !== null) {
+            clearTimeout(clickTimerRef.current);
+            clickTimerRef.current = null;
+        }
+        focusToken(row.id, tokens);
+    }, [row.id, tokens]);
 
     return (
         <>
             <TableRow
                 hover
                 selected={isActive}
-                onClick={settings.showDistances ? handleToggleOpen : undefined}
+                onClick={handleRowClick}
+                onDoubleClick={handleRowDoubleClick}
                 sx={{
                     height: "45px",
                     "& td": { py: isActive ? 0.6 : 0.4, px: 0.5 },
@@ -145,7 +168,7 @@ export default function PlayerRow({
                     backgroundColor: isActive ? (t) => alpha(t.palette.success.main, 0.12) : "inherit",
                     outline: isActive ? (t) => `1px solid ${alpha(t.palette.success.main, 0.35)}` : "none",
                     transform: isActive ? "scale(1.01)" : "scale(1)",
-                    cursor: settings.showDistances ? "pointer" : "default",
+                    cursor: "pointer",
                 }}
             >
                 {/* Expand / Collapse */}
@@ -156,7 +179,7 @@ export default function PlayerRow({
                             size="small"
                             onClick={(e) => {
                                 e.stopPropagation();
-                                handleToggleOpen();
+                                setOpen((prev) => !prev);
                             }}
                             sx={{ p: 0.25 }}
                         >

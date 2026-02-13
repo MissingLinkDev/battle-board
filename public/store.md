@@ -25,6 +25,7 @@ Battle Board is a powerful initiative tracker and combat management system for [
 - **Comprehensive Health Tracking** with customizable player visibility
 - **Role-based Interface** (separate GM and Player views)
 - **Math Input Support** for quick HP adjustments
+- **Double-Click Token Locate** - Double-click any row to pan the viewport to that token
 
 ---
 
@@ -42,6 +43,7 @@ That's it! You now have a fully functional initiative tracker with automatic ran
 - Use **"Add All in Scene"** to quickly add multiple tokens
 - Players and GM roll initiative normally - edit values by clicking on them
 - Expand any row (click the chevron or name) to access advanced controls
+- **Double-click any row** to pan the viewport directly to that token on the map
 - Hit **"Start"** when ready to begin combat
 
 ---
@@ -346,6 +348,7 @@ Battle Board saves all information directly to your scene and token metadata:
 - **Use decimals for tie-breaking** - `.1`, `.2`, `.3` are easier to manage than complex decimals
 - **Plan for insertions** - Leave gaps like `15` → `13` → `11` for mid-combat additions
 - **Group similar creatures** - All goblins can share initiative and act together
+- **Double-click to locate tokens** - Double-click any initiative row to pan the viewport to that token on the map (works for both GM and players)
 
 ### Health Tracking  
 - **Set Max HP first** - Current HP auto-adjusts proportionally
