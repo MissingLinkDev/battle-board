@@ -78,6 +78,13 @@ function GroupModal() {
                 (it.metadata as any)[META_KEY] = meta;
             }
         });
+        for (const id of tokenIds) {
+            await OBR.broadcast.sendMessage(
+                "com.missing-link-dev.battle-board/item-added",
+                id,
+                { destination: "LOCAL" },
+            );
+        }
 
         // Handle visibility if setting is enabled and group is staged
         if (staged) {

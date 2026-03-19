@@ -58,5 +58,12 @@ export function useAddAll(rows: InitiativeItem[], cmTokens: CMToken[]) {
                 current.name = displayName;
             }
         });
+        for (const id of idsToAdd) {
+            await OBR.broadcast.sendMessage(
+                "com.missing-link-dev.battle-board/item-added",
+                id,
+                { destination: "LOCAL" },
+            );
+        }
     };
 }

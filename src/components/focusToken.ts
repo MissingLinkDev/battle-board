@@ -21,4 +21,10 @@ export async function focusToken(tokenId: string, tokens: CMToken[]): Promise<vo
     };
 
     await OBR.viewport.animateTo({ position, scale });
+
+    await OBR.broadcast.sendMessage(
+        "com.missing-link-dev.battle-board/selected",
+        tokenId,
+        { destination: "LOCAL" },
+    );
 }

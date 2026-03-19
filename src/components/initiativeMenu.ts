@@ -43,6 +43,13 @@ export function registerInitiativeContextMenu() {
                         }
                     }
                 });
+                for (const item of context.items) {
+                    await OBR.broadcast.sendMessage(
+                        "com.missing-link-dev.battle-board/item-added",
+                        item.id,
+                        { destination: "LOCAL" },
+                    );
+                }
             })();
         },
     });
