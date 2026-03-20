@@ -230,6 +230,7 @@ export default function PlayerRow({
                                 fontWeight: isActive ? 700 : 600,
                                 fontSize: isActive ? "0.95rem" : "0.85rem",
                                 minWidth: 0,
+                                userSelect: "none",
                             }}
                         >
                             {row.visible ? row.name : <em>Hidden</em>}
