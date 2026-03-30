@@ -255,6 +255,7 @@ export default function InitiativeRow({
                                 whiteSpace: "nowrap",
                                 font: "inherit",
                                 lineHeight: "inherit",
+                                userSelect: 'none',
                             }}
                         >
                             {row.name ?? <em>Unnamed</em>}
