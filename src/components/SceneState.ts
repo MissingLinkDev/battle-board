@@ -1,25 +1,12 @@
 import OBR from "@owlbear-rodeo/sdk";
 import { getPluginId } from "../getPluginId";
-import { deriveGroupsFromItems, META_KEY, batchUpdateMeta } from "./metadata";
+import { META_KEY, batchUpdateMeta } from "./metadata";
 
 export const SCENE_META_KEY = getPluginId("sceneState");
 export const ROOM_META_KEY = getPluginId("roomSettings");
 
 /** New unified health mode for what players can see */
 export type HealthMode = "none" | "status" | "numbers";
-
-/**
- * Group type for compatibility with existing code.
- * NOTE: Groups are now derived from tokens, not stored in scene metadata.
- * This type exists for backward compatibility but the data comes from tokens.
- */
-export type Group = {
-    id: string;   // stable unique id
-    name: string; // display name
-    active: boolean; // whether this group is currently active in initiative (whose turn it is)
-    initiative: number;
-    staged?: boolean; // whether group is staged (in list but not participating in initiative yet)
-};
 
 export type InitiativeSettings = {
     // Display Settings (Initiative List)
@@ -255,7 +242,8 @@ export async function readSceneState(): Promise<SceneState | null> {
 }
 
 export async function saveSceneState(patch: Partial<SceneState>) {
-    // Settings are saved to room metadata (room-level persistence)
+    // Settings are saved to room metadata (room-level persistence).
+    // Encounter started/round are written by the Encounter store.
     if (patch.settings !== undefined) {
         // Get current room settings to merge with
         const currentRoomSettings = await readRoomSettings();
@@ -264,22 +252,6 @@ export async function saveSceneState(patch: Partial<SceneState>) {
             ...patch.settings,
         });
         await saveRoomSettings(nextSettings);
-    }
-
-    // Only save started/round to scene metadata (scene-specific state)
-    if (patch.started !== undefined || patch.round !== undefined) {
-        const prev = await OBR.scene.getMetadata();
-        const current = (prev[SCENE_META_KEY] as any) ?? {};
-
-        const next = {
-            started: patch.started ?? current.started ?? false,
-            round: patch.round ?? current.round ?? 0,
-        };
-
-        await OBR.scene.setMetadata({
-            ...prev,
-            [SCENE_META_KEY]: next,
-        });
     }
 }
 
@@ -324,136 +296,4 @@ export function onSceneStateChange(cb: (state: SceneState | null) => void) {
         const state = await buildState(raw);
         cb(state);
     });
-}
-
-// ========== TOKEN-BASED GROUP MANAGEMENT FUNCTIONS ==========
-
-/**
- * Get all groups by deriving them from tokens.
- * This is the single source of truth for group data.
- */
-export async function getGroups(): Promise<Group[]> {
-    const items = await OBR.scene.items.getItems();
-    const derived = deriveGroupsFromItems(items);
-
-    // Convert DerivedGroup to Group for backward compatibility
-    return derived.map(g => ({
-        id: g.id,
-        name: g.name,
-        initiative: g.initiative,
-        active: g.active,
-        staged: g.staged,
-    }));
-}
-
-/**
- * Create a new empty group (no tokens yet).
- * Returns a group ID that can be used to add tokens.
- */
-export async function createGroup(name: string, initiative: number = 0, staged: boolean = false): Promise<Group> {
-    const id = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-
-    // Return a "virtual" group that will exist once tokens are added
-    return {
-        id,
-        name: name.trim() || "New Group",
-        active: false,
-        initiative,
-        staged,
-    };
-}
-
-/**
- * Update initiative for all tokens in a group.
- */
-export async function updateGroupInitiative(groupId: string, initiative: number): Promise<void> {
-    const { syncGroupTokensInitiative } = await import("./metadata");
-    await syncGroupTokensInitiative(OBR, groupId, initiative);
-}
-
-/**
- * Rename a group by updating all its member tokens.
- */
-export async function renameGroup(id: string, newName: string): Promise<void> {
-    const { updateGroupName } = await import("./metadata");
-    await updateGroupName(OBR, id, newName.trim());
-}
-
-/**
- * Delete a group by removing all tokens from it.
- */
-export async function deleteGroup(id: string): Promise<void> {
-    const { deleteGroup: deleteGroupMeta } = await import("./metadata");
-    await deleteGroupMeta(OBR, id);
-}
-
-/**
- * Set active status for a group by updating all its member tokens.
- */
-export async function setGroupActive(id: string, active: boolean): Promise<void> {
-    const { updateGroupActive } = await import("./metadata");
-    await updateGroupActive(OBR, id, active);
-}
-
-/**
- * Clear active status from all groups.
- *
- * UPDATED: Uses atomic batching to clear all groups at once instead of
- * sequential awaits, reducing race condition window.
- */
-export async function clearAllGroupsActive(): Promise<void> {
-    const groups = await getGroups();
-    const activeGroups = groups.filter(g => g.active);
-
-    if (activeGroups.length === 0) return;
-
-    // Collect all token IDs from all active groups
-    const { getTokensInGroup, batchUpdateMeta } = await import("./metadata");
-    const allTokenIds: string[] = [];
-
-    for (const group of activeGroups) {
-        const tokens = await getTokensInGroup(OBR, group.id);
-        allTokenIds.push(...tokens);
-    }
-
-    // Single batch update for all tokens in all active groups
-    if (allTokenIds.length > 0) {
-        const patches = allTokenIds.map(id => ({
-            id,
-            patch: { active: false }
-        }));
-        await batchUpdateMeta(OBR, patches);
-    }
-}
-
-/**
- * Set staged status for a group by updating all its member tokens.
- */
-export async function setGroupStaged(id: string, staged: boolean): Promise<void> {
-    const { updateGroupStaged } = await import("./metadata");
-    await updateGroupStaged(OBR, id, staged);
-}
-
-/**
- * Get the currently active group.
- */
-export async function getActiveGroup(): Promise<Group | null> {
-    const groups = await getGroups();
-    return groups.find(g => g.active) ?? null;
-}
-
-/**
- * Get all staged groups.
- */
-export async function getStagedGroups(): Promise<Group[]> {
-    const groups = await getGroups();
-    return groups.filter(g => g.staged);
-}
-
-/**
- * Get all participating (non-staged) groups.
- */
-export async function getParticipatingGroups(): Promise<Group[]> {
-    const groups = await getGroups();
-    return groups.filter(g => !g.staged);
 }

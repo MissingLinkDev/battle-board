@@ -6,17 +6,17 @@ import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import type { InitiativeItem } from "./InitiativeItem";
+import type { Combatant, CombatantPatch } from "../encounter";
 import PlayerRow from "./PlayerRow";
 import type { CMToken } from "./tokens";
 import type { InitiativeSettings } from "./SceneState";
 
 type PlayerTableProps = {
-    items: InitiativeItem[];
+    items: Combatant[];
     settings: InitiativeSettings;
     tokens: CMToken[];
     showHealthColumn?: boolean; // Optional override
-    updateRow?: (id: string, patch: Partial<InitiativeItem>) => void;
+    updateRow?: (id: string, patch: CombatantPatch) => void;
 };
 
 export default function PlayerTable({

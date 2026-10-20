@@ -11,7 +11,7 @@ import KeyboardArrowUp from "@mui/icons-material/KeyboardArrowUp";
 import { alpha } from "@mui/material/styles";
 import OBR, { isImage, type Item } from "@owlbear-rodeo/sdk";
 
-import type { InitiativeItem } from "./InitiativeItem";
+import type { Combatant, CombatantPatch } from "../encounter";
 import { HealthDisplay } from "./HealthDisplay";
 import { DistancePanel } from "./DistancePanel";
 import { useDistances } from "../hooks/useDistances";
@@ -23,14 +23,14 @@ import type { InitiativeSettings } from "./SceneState";
 import { focusToken } from "./focusToken";
 
 type Props = {
-    row: InitiativeItem;
+    row: Combatant;
     tokenUrl?: string;
     settings: InitiativeSettings;
     tokens: CMToken[];
-    items?: InitiativeItem[];
+    items?: Combatant[];
     colSpan?: number;
     showHealthColumn?: boolean;
-    updateRow?: (id: string, patch: Partial<InitiativeItem>) => void;
+    updateRow?: (id: string, patch: CombatantPatch) => void;
 };
 
 export default function PlayerRow({
@@ -53,7 +53,7 @@ export default function PlayerRow({
     const healthInfo = getHealthInfo(row);
 
     // Health editing hook
-    const onChange = (patch: Partial<InitiativeItem>) => {
+    const onChange = (patch: CombatantPatch) => {
         updateRow?.(row.id, patch);
     };
     const {

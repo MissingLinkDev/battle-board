@@ -1,6 +1,5 @@
 // utils.ts
 import OBR from "@owlbear-rodeo/sdk";
-import type { InitiativeItem } from "./InitiativeItem";
 import type { CMToken } from "./tokens";
 
 /* =========================
@@ -435,19 +434,6 @@ export async function obrDistanceBetweenPointsUnits(
    Sorting / small math utils
    ========================= */
 
-export function sortByInitiativeDesc(list: InitiativeItem[]) {
-    return [...list].sort((a, b) => {
-        const ai = a.initiative ?? 0;
-        const bi = b.initiative ?? 0;
-
-        const af = Math.floor(ai);
-        const bf = Math.floor(bi);
-
-        if (bf !== af) return bf - af;            // higher integer bucket first
-        if (ai !== bi) return ai - bi;            // then smaller decimal first
-        return (a.name ?? "").localeCompare(b.name ?? ""); // stable by name
-    });
-}
 
 /** Clamp a number between min and max */
 export const clamp = (n: number, min: number, max: number) =>

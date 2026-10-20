@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import OBR from "@owlbear-rodeo/sdk";
 import type { CMToken } from "../components/tokens";
-import type { InitiativeItem } from "../components/InitiativeItem";
+import type { Combatant } from "../encounter";
 import { formatFeet, formatDistanceLabel, obrDistanceBetweenTokensUnits, getCachedGridUnits, type TokenDistanceMode } from "../components/utils";
 import { readMeta } from "../components/metadata";
 
@@ -21,7 +21,7 @@ export function useDistances(
     tokens: CMToken[],
     enabled: boolean = true,
     mode: TokenDistanceMode = "box",
-    items?: InitiativeItem[],
+    items?: Combatant[],
     roundDistances: boolean = false
 ) {
     const [distances, setDistances] = useState<DistanceInfo[]>([]);

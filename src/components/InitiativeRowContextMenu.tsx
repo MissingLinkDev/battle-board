@@ -5,20 +5,18 @@ import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import GroupAddRounded from "@mui/icons-material/GroupAddRounded";
 import DeleteForeverRounded from "@mui/icons-material/DeleteForeverRounded";
-import OBR from "@owlbear-rodeo/sdk";
-import type { InitiativeItem } from "./InitiativeItem";
-import type { Group, InitiativeSettings } from "./SceneState";
-import { addTokenToGroup, removeTokenFromGroup, getTokensInGroup, updateTokenVisibility, updateGroupStaged } from "./metadata";
-import { createGroup, deleteGroup } from "./SceneState";
+import type { Combatant } from "../encounter";
+import type { InitiativeSettings } from "./SceneState";
+import type { Group } from "../encounter";
+import { encounterStore } from "../encounter";
 import { GroupSelectionDialog } from "./GroupSelectionDialog";
 
 type Props = {
-    row: InitiativeItem;
+    row: Combatant;
     groups: Group[];
     contextMenu: { mouseX: number; mouseY: number } | null;
     onClose: () => void;
     onRemove: (id: string) => void;
-    onChange: (draft: Partial<InitiativeItem>) => void;
     globalSettings: InitiativeSettings;
 };
 
@@ -28,7 +26,6 @@ export function InitiativeRowContextMenu({
     contextMenu,
     onClose,
     onRemove,
-    onChange,
     globalSettings,
 }: Props) {
     const [groupDialogOpen, setGroupDialogOpen] = useState(false);
@@ -42,95 +39,20 @@ export function InitiativeRowContextMenu({
         setGroupDialogOpen(false);
     };
 
-    const handleSelectGroup = async (groupId: string) => {
-        try {
-            // Find the target group to get its initiative and staged status
-            const targetGroup = groups.find(g => g.id === groupId);
-            const groupInitiative = targetGroup?.initiative ?? 0;
-            const groupStaged = targetGroup?.staged ?? false;
+    const hideWhenStaged = !!globalSettings.groupStagingControlsVisibility;
 
-            // Add token to group (this will sync the initiative automatically)
-            await addTokenToGroup(OBR, row.id, groupId);
-
-            // Handle visibility if the setting is enabled and group is staged
-            if (globalSettings.groupStagingControlsVisibility && groupStaged) {
-                await updateTokenVisibility(OBR, row.id, false);
-            }
-
-            // Update local state for immediate UI feedback
-            onChange({
-                groupId,
-                groupName: targetGroup?.name ?? null,
-                initiative: groupInitiative // Sync initiative with group
-            });
-        } catch (error) {
-            console.error("Failed to add token to group:", error);
-        }
+    const handleSelectGroup = (groupId: string) => {
+        encounterStore.addToGroup([row.id], { groupId }, { hideWhenStaged }).catch(console.error);
     };
 
-    const handleCreateGroup = async (name: string, staged: boolean) => {
-        try {
-            // Create group with the current row's initiative as the default
-            const group = await createGroup(name, row.initiative, staged);
-
-            // Add token to the new group, passing the group name and initiative
-            await addTokenToGroup(OBR, row.id, group.id, group.name, group.initiative);
-
-            // If created as staged, update the group's staged status
-            if (staged) {
-                await updateGroupStaged(OBR, group.id, true);
-                if (globalSettings.groupStagingControlsVisibility) {
-                    await updateTokenVisibility(OBR, row.id, false);
-                }
-            }
-
-            // Update local state for immediate UI feedback
-            onChange({
-                groupId: group.id,
-                groupName: group.name,
-                groupStaged: staged,
-            });
-        } catch (error) {
-            console.error("Failed to create group:", error);
-        }
+    const handleCreateGroup = (name: string, staged: boolean) => {
+        encounterStore
+            .addToGroup([row.id], { newGroup: { name, staged, initiative: row.initiative } }, { hideWhenStaged })
+            .catch(console.error);
     };
 
-    const handleRemoveFromGroup = async () => {
-        try {
-            const currentGroupId = row.groupId;
-
-            // Remove token from group
-            await removeTokenFromGroup(OBR, row.id);
-
-            // Handle visibility if the setting is enabled - make token visible when removed from group
-            if (globalSettings.groupStagingControlsVisibility && currentGroupId) {
-                const currentGroup = groups.find(g => g.id === currentGroupId);
-                if (currentGroup?.staged) {
-                    // Token was in a staged group, make it visible when removed
-                    await updateTokenVisibility(OBR, row.id, true);
-                }
-            }
-
-            // Update local state - clear all group-related fields
-            onChange({
-                groupId: null,
-                groupName: null,
-                groupStaged: false
-            });
-
-            // Check if this was the last token in the group and delete the group if so
-            if (currentGroupId) {
-                // Check how many tokens are left in the group after this removal
-                const remainingTokens = await getTokensInGroup(OBR, currentGroupId);
-
-                // If no tokens left, delete the empty group
-                if (remainingTokens.length === 0) {
-                    await deleteGroup(currentGroupId);
-                }
-            }
-        } catch (error) {
-            console.error("Failed to remove token from group:", error);
-        }
+    const handleRemoveFromGroup = () => {
+        encounterStore.leaveGroup([row.id], { showIfWasStaged: hideWhenStaged }).catch(console.error);
     };
 
     return (

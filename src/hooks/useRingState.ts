@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import type { InitiativeItem } from "../components/InitiativeItem";
+import type { Combatant } from "../encounter";
 
 export type RingStyle = {
     color: string | null;
@@ -18,7 +18,7 @@ export type RingConfig = {
 /**
  * Centralized ring configuration management
  */
-export function useRingState(row: InitiativeItem) {
+export function useRingState(row: Combatant) {
     const config = useMemo((): RingConfig => ({
         movement: row.movement ?? 30,
         attackRange: row.attackRange ?? 60,

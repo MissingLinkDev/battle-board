@@ -6,13 +6,13 @@ import FormControlLabel from "@mui/material/FormControlLabel";
 import Checkbox from "@mui/material/Checkbox";
 import ColorPicker from "./ColorPicker";
 import { CommitNumberField } from "./CommitFields";
-import type { InitiativeItem } from "./InitiativeItem";
+import type { Combatant, CombatantPatch } from "../encounter";
 import type { RingConfig } from "../hooks/useRingState";
 
 type Props = {
-    row: InitiativeItem;
+    row: Combatant;
     config: RingConfig;
-    onUpdate: (draft: Partial<InitiativeItem>) => void;
+    onUpdate: (draft: CombatantPatch) => void;
 };
 
 /**

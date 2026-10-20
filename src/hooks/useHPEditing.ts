@@ -1,11 +1,11 @@
 import { useState } from "react";
-import type { InitiativeItem } from "../components/InitiativeItem";
+import type { Combatant, CombatantPatch } from "../encounter";
 import OBR from "@owlbear-rodeo/sdk";
 
 export function useHPEditing(
-    row: InitiativeItem,
+    row: Combatant,
     started: boolean,
-    onChange: (patch: Partial<InitiativeItem>) => void
+    onChange: (patch: CombatantPatch) => void
 ) {
     const [editingField, setEditingField] = useState<null | "cur" | "max" | "temp" | "ac">(null);
 
@@ -93,7 +93,7 @@ export function useHPEditing(
             if (nextCur > m) nextCur = m;
         }
 
-        const patch: Partial<InitiativeItem> = { maxHP: m };
+        const patch: CombatantPatch = { maxHP: m };
         if (nextCur !== row.currentHP) patch.currentHP = nextCur;
         onChange(patch);
         setEditingField(null);

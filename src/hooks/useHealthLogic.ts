@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { InitiativeItem } from "../components/InitiativeItem";
+import type { Combatant } from "../encounter";
 import type { InitiativeSettings } from "../components/SceneState";
 
 export type HealthMode = "none" | "status" | "numbers";
@@ -22,7 +22,7 @@ export function useHealthLogic(settings: InitiativeSettings) {
 
         const showHealthColumn = healthMasterOn && (pcMode !== "none" || npcMode !== "none");
 
-        const getHealthInfo = (row: InitiativeItem): HealthInfo => {
+        const getHealthInfo = (row: Combatant): HealthInfo => {
             const isPC = !!row.playerCharacter;
             const mode = isPC ? pcMode : npcMode;
             const isBloodied = row.maxHP > 0 ? row.currentHP < row.maxHP / 2 : false;

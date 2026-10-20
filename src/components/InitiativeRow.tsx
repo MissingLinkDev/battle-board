@@ -13,7 +13,7 @@ import VisibilityOffRounded from "@mui/icons-material/VisibilityOffRounded";
 import RadarRounded from "@mui/icons-material/RadarRounded";
 import Checkbox from "@mui/material/Checkbox";
 
-import type { InitiativeItem } from "./InitiativeItem";
+import type { Combatant, CombatantPatch } from "../encounter";
 import { CommitNumberField } from "./CommitFields";
 import { DistancePanel } from "./DistancePanel";
 import { RingControls } from "./RingControls";
@@ -22,7 +22,7 @@ import { useDistances } from "../hooks/useDistances";
 import { useRingState } from "../hooks/useRingState";
 import { useRingManager } from "../hooks/useRingsManager";
 import type { InitiativeSettings } from "./SceneState";
-import type { Group } from "./SceneState";
+import type { Group } from "../encounter";
 import { useContextMenu } from "../hooks/useContextMenu";
 import { useHPEditing } from "../hooks/useHPEditing";
 import { InitiativeRowContextMenu } from "./InitiativeRowContextMenu";
@@ -40,18 +40,18 @@ type RowSettings = {
 };
 
 type Props = {
-    row: InitiativeItem;
+    row: Combatant;
     expanded?: boolean;
     onToggleExpand?: () => void;
     onRequestActivate?: () => void;
-    onChange?: (draft: Partial<InitiativeItem>) => void;
+    onChange?: (draft: CombatantPatch) => void;
     onSizeChange?: () => void;
     onRemove?: (id: string) => void;
     settings?: RowSettings;
     globalSettings: InitiativeSettings;
     started: boolean;
     tokens: CMToken[];
-    items?: InitiativeItem[];
+    items?: Combatant[];
     colSpan?: number;
     ready?: boolean;
     groups: Group[];
@@ -135,7 +135,7 @@ export default function InitiativeRow({
     }), [settings]);
 
     // Event handlers
-    const bubble = (draft: Partial<InitiativeItem>) => onChange?.(draft);
+    const bubble = (draft: CombatantPatch) => onChange?.(draft);
 
     const toggleDmPreview = async (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -477,7 +477,6 @@ export default function InitiativeRow({
                 contextMenu={contextMenu}
                 onClose={handleClose}
                 onRemove={onRemove || (() => { })}
-                onChange={bubble}
                 globalSettings={globalSettings}
             />
 

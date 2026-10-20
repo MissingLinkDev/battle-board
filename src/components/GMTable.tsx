@@ -18,19 +18,19 @@ import NavigateNextRounded from "@mui/icons-material/NavigateNextRounded";
 import Tooltip from "@mui/material/Tooltip";
 import SettingsRounded from "@mui/icons-material/SettingsRounded";
 
-import type { InitiativeItem } from "./InitiativeItem";
-import type { Group, InitiativeSettings } from "./SceneState";
+import type { Combatant, CombatantPatch } from "../encounter";
+import type { InitiativeSettings } from "./SceneState";
+import type { Group } from "../encounter";
 import type { CMToken } from "./tokens";
 import { useMemo, useEffect } from "react";
-import { deleteGroup } from "./SceneState";
 import StopRounded from "@mui/icons-material/StopRounded";
 import { useRingCoordinatorCleanup, ringCoordinator } from "../hooks/useRingCoordinator";
 
 type Props = {
-    items: InitiativeItem[];
+    items: Combatant[];
     expandedIds: Set<string>;
     onToggleExpand: (id: string) => void;
-    onRowChange: (id: string, draft: Partial<InitiativeItem>) => void;
+    onRowChange: (id: string, draft: CombatantPatch) => void;
     onRowRemove: (id: string) => void;
 
     settings: InitiativeSettings;
@@ -56,11 +56,11 @@ type Props = {
 type RenderItem = {
     type: 'group';
     group: Group;
-    items: InitiativeItem[];
+    items: Combatant[];
     staged: boolean;
 } | {
     type: 'individual';
-    item: InitiativeItem;
+    item: Combatant;
 };
 
 export default function GmTable({
@@ -158,8 +158,8 @@ export default function GmTable({
         const staged: RenderItem[] = [];
 
         // Group items by their groupId
-        const groupedItems = new Map<string, InitiativeItem[]>();
-        const individualItems: InitiativeItem[] = [];
+        const groupedItems = new Map<string, Combatant[]>();
+        const individualItems: Combatant[] = [];
 
         for (const item of items) {
             if (item.groupId) {
@@ -234,12 +234,7 @@ export default function GmTable({
         onRequestResize?.();
     };
 
-    const handleGroupUngroup = async (groupId: string) => {
-        try {
-            await deleteGroup(groupId);
-        } catch (error) {
-            console.error("Failed to delete group:", error);
-        }
+    const handleGroupUngroup = () => {
         onRequestResize?.();
     };
 

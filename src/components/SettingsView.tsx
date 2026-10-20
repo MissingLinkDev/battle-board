@@ -19,8 +19,9 @@ import MenuItem from "@mui/material/MenuItem";
 
 import type { InitiativeSettings } from "./SceneState";
 import { META_KEY, isMetadata } from "./metadata";
+import { encounterStore } from "../encounter";
 import { ensureRings, clearRings } from "./rings";
-import type { InitiativeItem } from "./InitiativeItem";
+import type { Combatant } from "../encounter";
 import CircularProgress from "@mui/material/CircularProgress";
 
 /* ------------------------------------------------------------------ */
@@ -30,7 +31,7 @@ type Props = {
     value: InitiativeSettings;
     onChange: (next: InitiativeSettings) => void;
     onBack: () => void;
-    rows?: InitiativeItem[];
+    rows?: Combatant[];
     ready?: boolean;
 };
 
@@ -342,23 +343,8 @@ export default function SettingsView({ value, onChange, onBack, rows, ready = tr
         };
     }, [value.showMovementRange, value.showAttackRange, value.showRangeRings]);
 
-    const handleClearAll = async () => {
-        try {
-            const items = await OBR.scene.items.getItems();
-            const ids = items.map((it) => it.id);
-            await OBR.scene.items.updateItems(ids, (items) => {
-                for (const it of items) {
-                    const meta = (it.metadata as any)[META_KEY];
-                    if (meta) {
-                        meta.initiative = 0;
-                        meta.active = false;
-                        meta.inInitiative = false;
-                    }
-                }
-            });
-        } catch (err) {
-            console.error("Failed to clear initiative list:", err);
-        }
+    const handleClearAll = () => {
+        encounterStore.clearAll().catch((err) => console.error("Failed to clear initiative list:", err));
     };
 
     // Resolve UI defaults without forcing state writes yet

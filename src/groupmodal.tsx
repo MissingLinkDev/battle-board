@@ -15,34 +15,26 @@ import InputLabel from "@mui/material/InputLabel";
 import { PluginGate } from "./PluginGate";
 import { PluginThemeProvider } from "./PluginThemeProvider";
 import { getPluginId } from "./getPluginId";
-import { createMetaForItem, updateTokenVisibility, type MetaShape } from "./components/metadata";
-import { createGroup, getGroups, readRoomSettings, type Group } from "./components/SceneState";
+import { readRoomSettings } from "./components/SceneState";
+import { encounterStore, useEncounter, type GroupTarget } from "./encounter";
 import "./styles/index.css";
 
 const META_KEY = getPluginId("metadata");
 const MODAL_ID = META_KEY + "/group-modal";
 
 function GroupModal() {
-    const [groups, setGroups] = React.useState<Group[]>([]);
+    const { groups } = useEncounter();
     const [tokenIds, setTokenIds] = React.useState<string[]>([]);
     const [showCreateForm, setShowCreateForm] = React.useState(false);
     const [newGroupName, setNewGroupName] = React.useState("");
     const [createAsStaged, setCreateAsStaged] = React.useState(false);
 
     React.useEffect(() => {
-        const init = async () => {
-            // Read the token IDs stored by the context menu
-            const meta = await OBR.player.getMetadata();
+        // Read the token IDs stored by the context menu
+        OBR.player.getMetadata().then((meta) => {
             const pendingTokens = meta[META_KEY + "/pendingGroupTokens"] as string[] | undefined;
-            if (pendingTokens && pendingTokens.length > 0) {
-                setTokenIds(pendingTokens);
-            }
-
-            // Fetch existing groups
-            const existingGroups = await getGroups();
-            setGroups(existingGroups);
-        };
-        init();
+            if (pendingTokens && pendingTokens.length > 0) setTokenIds(pendingTokens);
+        });
     }, []);
 
     const closeModal = async () => {
@@ -51,86 +43,24 @@ function GroupModal() {
         await OBR.modal.close(MODAL_ID);
     };
 
-    /**
-     * Add tokens to initiative and assign to group in a single atomic update.
-     * This prevents the token from briefly appearing ungrouped in the tracker.
-     */
-    const addTokensToGroupAtomically = async (
-        groupId: string,
-        groupName: string,
-        groupInitiative: number,
-        staged: boolean,
-    ) => {
-        await OBR.scene.items.updateItems(tokenIds, (items: any[]) => {
-            for (const it of items) {
-                const hadMeta = !!(it.metadata as any)[META_KEY];
-                const meta: MetaShape = hadMeta
-                    ? (it.metadata as any)[META_KEY]
-                    : createMetaForItem(it);
-
-                // Set initiative + group in one shot
-                meta.inInitiative = true;
-                meta.groupId = groupId;
-                meta.groupName = groupName;
-                meta.groupStaged = staged;
-                meta.initiative = groupInitiative;
-
-                (it.metadata as any)[META_KEY] = meta;
-            }
-        });
-        for (const id of tokenIds) {
-            await OBR.broadcast.sendMessage(
-                "com.missing-link-dev.battle-board/item-added",
-                id,
-                { destination: "LOCAL" },
-            );
-        }
-
-        // Handle visibility if setting is enabled and group is staged
-        if (staged) {
-            const settings = await readRoomSettings();
-            if (settings?.groupStagingControlsVisibility) {
-                for (const tokenId of tokenIds) {
-                    await updateTokenVisibility(OBR, tokenId, false);
-                }
-            }
-        }
-    };
-
-    const handleSelectGroup = async (groupId: string) => {
+    const addTokens = async (target: GroupTarget) => {
         try {
-            const targetGroup = groups.find(g => g.id === groupId);
-            if (!targetGroup) return;
-
-            await addTokensToGroupAtomically(
-                groupId,
-                targetGroup.name,
-                targetGroup.initiative,
-                targetGroup.staged ?? false,
-            );
+            const settings = await readRoomSettings();
+            await encounterStore.addToGroup(tokenIds, target, {
+                hideWhenStaged: !!settings?.groupStagingControlsVisibility,
+            });
         } catch (error) {
             console.error("Failed to add tokens to group:", error);
         }
         await closeModal();
     };
 
+    const handleSelectGroup = (groupId: string) => addTokens({ groupId });
+
     const handleCreateGroup = async () => {
         const trimmed = newGroupName.trim();
         if (!trimmed) return;
-
-        try {
-            const group = await createGroup(trimmed, 0, createAsStaged);
-
-            await addTokensToGroupAtomically(
-                group.id,
-                group.name,
-                group.initiative,
-                createAsStaged,
-            );
-        } catch (error) {
-            console.error("Failed to create group:", error);
-        }
-        await closeModal();
+        await addTokens({ newGroup: { name: trimmed, staged: createAsStaged, initiative: 0 } });
     };
 
     const handleSelectChange = (event: any) => {

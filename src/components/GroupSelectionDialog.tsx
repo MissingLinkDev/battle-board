@@ -12,7 +12,7 @@ import Checkbox from "@mui/material/Checkbox";
 import TextField from "@mui/material/TextField";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
-import type { Group } from "./SceneState";
+import type { Group } from "../encounter";
 import InputLabel from "@mui/material/InputLabel";
 
 type Props = {

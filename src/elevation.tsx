@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import OBR from "@owlbear-rodeo/sdk";
 import { NumberField } from "./components/NumberField";
 import { PluginGate } from "./PluginGate";
+import { encounterStore } from "./encounter";
 import { PluginThemeProvider } from "./PluginThemeProvider";
 import { getPluginId } from "./getPluginId";
 
@@ -67,13 +68,7 @@ function ElevationMenu() {
         const currentGeneration = ++updateGenerationRef.current;
 
         // Update items asynchronously
-        OBR.scene.items.updateItems(selectedIds, (items) => {
-            for (const item of items) {
-                const metadata = item.metadata as any;
-                if (!metadata[META_KEY]) continue;
-                metadata[META_KEY].elevation = newValue;
-            }
-        }).then(async () => {
+        encounterStore.patch(selectedIds, { elevation: newValue }).then(async () => {
             // Only proceed if this is still the latest update
             if (currentGeneration !== updateGenerationRef.current) {
                 return; // Abort, newer update has been triggered

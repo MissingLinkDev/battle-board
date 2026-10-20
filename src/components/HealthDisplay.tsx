@@ -1,10 +1,10 @@
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import type { InitiativeItem } from "./InitiativeItem";
+import type { Combatant } from "../encounter";
 import type { HealthInfo } from "../hooks/useHealthLogic";
 
 type Props = {
-    row: InitiativeItem;
+    row: Combatant;
     healthInfo: HealthInfo;
     variant?: "compact" | "full";
 };

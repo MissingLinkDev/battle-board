@@ -1,5 +1,6 @@
 import OBR from "@owlbear-rodeo/sdk";
-import { META_KEY, createMetaForItem } from "./metadata";
+import { META_KEY } from "./metadata";
+import { encounterStore } from "../encounter";
 
 const MODAL_ID = META_KEY + "/group-modal";
 
@@ -32,25 +33,7 @@ export function registerInitiativeContextMenu() {
             },
         ],
         onClick(context) {
-            (async () => {
-                await OBR.scene.items.updateItems(context.items, (items) => {
-                    for (const it of items) {
-                        const meta = (it.metadata as any)[META_KEY];
-                        if (!meta) {
-                            (it.metadata as any)[META_KEY] = { ...createMetaForItem(it), inInitiative: true };
-                        } else {
-                            meta.inInitiative = true;
-                        }
-                    }
-                });
-                for (const item of context.items) {
-                    await OBR.broadcast.sendMessage(
-                        "com.missing-link-dev.battle-board/item-added",
-                        item.id,
-                        { destination: "LOCAL" },
-                    );
-                }
-            })();
+            encounterStore.add(context.items.map((i) => i.id), { solo: true }).catch(console.error);
         },
     });
 
@@ -119,20 +102,7 @@ export function registerInitiativeContextMenu() {
             },
         ],
         onClick(context) {
-            (async () => {
-                await OBR.scene.items.updateItems(context.items, (items) => {
-                    for (const it of items) {
-                        const meta = (it.metadata as any)[META_KEY];
-                        if (meta) {
-                            meta.inInitiative = false;
-                            meta.active = false;
-                            meta.groupId = null;
-                            meta.groupName = null;
-                            meta.groupStaged = false;
-                        }
-                    }
-                });
-            })();
+            encounterStore.remove(context.items.map((i) => i.id)).catch(console.error);
         },
     });
 

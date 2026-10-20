@@ -14,8 +14,7 @@ import { useResizeToOBR } from "../hooks/useResizeToOBR";
 import { useInitiativeState } from "../hooks/useInitiativeState";
 import { useHealthLogic } from "../hooks/useHealthLogic";
 import { useTurns } from "../actions/useTurns";
-import { removeFromInitiative as removeAction } from "../actions/removeFromInitiative";
-import { useAddAll } from "../actions/useAddAll";
+import { encounterStore } from "../encounter";
 import { registerInitiativeContextMenu } from "./initiativeMenu";
 import { useRingCoordinatorCleanup } from "../hooks/useRingCoordinator";
 import { useConcentrationNotifications } from "../hooks/useConcentrationNotifications";
@@ -29,17 +28,12 @@ export function InitiativeTracker() {
 
     // Centralized state management
     const {
-        rows,
-        setRows,
+        combatants,
         started,
-        setStarted,
         round,
-        setRound,
         settings,
         setSettings,
-        saveSceneState,
         groups,
-        sortedRows,
         visibleRows,
         initiativeTokens,
         updateRow,
@@ -68,20 +62,19 @@ export function InitiativeTracker() {
     }, []);
 
     // Turn management - now includes groups
-    const { handleStart, handleEnd, handleNext, handlePrev } = useTurns(
-        setRows, round, setRound, started, setStarted, saveSceneState
-    );
+    const { handleStart, handleEnd, handleNext, handlePrev } = useTurns();
 
     // Token management
-    const handleAddAll = useAddAll(rows, cmTokens);
+    const handleAddAll = (includeHidden: boolean = true) => {
+        const inInitiative = new Set(combatants.map((c) => c.id));
+        const ids = cmTokens
+            .filter((t) => !inInitiative.has(t.id) && (includeHidden || t.visible !== false))
+            .map((t) => t.id);
+        encounterStore.add(ids).catch(console.error);
+    };
 
-    const removeFromInitiative = async (id: string) => {
-        try {
-            await removeAction(id);
-            setRows((prev) => prev.filter((r) => r.id !== id));
-        } catch (e) {
-            console.error("Failed to remove from initiative:", e);
-        }
+    const removeFromInitiative = (id: string) => {
+        encounterStore.remove([id]).catch(console.error);
     };
 
     // Initialize context menu
@@ -146,7 +139,7 @@ export function InitiativeTracker() {
                 {role === "GM" ? (
                     <Box sx={{ width: '100%', bgcolor: 'background.paper' }}>
                         <GmTable
-                            items={sortedRows}
+                            items={combatants}
                             expandedIds={expandedIds}
                             onToggleExpand={(id) => {
                                 toggleExpanded(id);
@@ -228,7 +221,7 @@ export function InitiativeTracker() {
                         value={settings}
                         onChange={setSettings}
                         onBack={() => setView("tracker")}
-                        rows={sortedRows}
+                        rows={combatants}
                         ready={ready}
                     />
                 </Box>

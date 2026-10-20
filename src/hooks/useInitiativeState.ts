@@ -1,90 +1,55 @@
-import { useCallback, useMemo } from "react";
-import { useInitiativeRows } from "./useInitiativeRows";
+import { useCallback, useMemo, useState } from "react";
 import { useSceneStateSync } from "./useSceneStateSync";
 import { useCMTokens } from "../components/useCMTokens";
-import type { InitiativeItem } from "../components/InitiativeItem";
+import { encounterStore, useEncounter, type CombatantPatch } from "../encounter";
 
 /**
- * Centralized state management for the entire initiative system
+ * Everything the tracker renders: the encounter (from the Encounter store),
+ * room settings, token geometry, and which rows are expanded.
  */
 export function useInitiativeState() {
-    const { rows, setRows, sortedRows, expandedIds, toggleExpanded, initiativeItemIds, localEditRef } = useInitiativeRows();
-    const { started, setStarted, round, setRound, settings, setSettings, saveSceneState, groups } = useSceneStateSync();
+    const { combatants, groups, started, round } = useEncounter();
+    const { settings, setSettings } = useSceneStateSync();
     const cmTokens = useCMTokens();
+    const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
-    // Memoized derived state
-    const activeItem = useMemo(() =>
-        rows.find(r => r.active) ?? null,
-        [rows]
-    );
+    const toggleExpanded = useCallback((id: string) =>
+        setExpandedIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        }), []);
 
-    // FIXED: Use sortedRows (which includes latest active state) instead of a separate filter
+    const initiativeItemIds = useMemo(() => new Set(combatants.map((c) => c.id)), [combatants]);
+
+    // What players may see: visible combatants that are not in a staged group.
     const visibleRows = useMemo(() => {
-        // Create a map of group ID to group for quick lookups
-        const groupsById = new Map(groups.map(g => [g.id, g]));
-
-        return sortedRows.filter(r => {
-            // Filter out invisible rows
-            if (r.visible === false) return false;
-
-            // Filter out rows in staged (inactive) groups
-            if (r.groupId) {
-                const group = groupsById.get(r.groupId);
-                if (group && group.staged) {
-                    return false; // Don't show tokens from staged groups to players
-                }
-            }
-
-            // Row is visible and either ungrouped or in an active group
-            return true;
-        });
-    }, [sortedRows, groups]); // IMPORTANT: Use sortedRows instead of rows
+        const staged = new Set(groups.filter((g) => g.staged).map((g) => g.id));
+        return combatants.filter((c) => c.visible !== false && !(c.groupId && staged.has(c.groupId)));
+    }, [combatants, groups]);
 
     const initiativeTokens = useMemo(() =>
         cmTokens.filter(t => initiativeItemIds.has(t.id)),
         [cmTokens, initiativeItemIds]
     );
 
-    // Centralized row update function
-    const updateRow = useCallback((id: string, draft: Partial<InitiativeItem>) => {
-        localEditRef.current = true;
-        setRows(prev => prev.map(r => r.id === id ? { ...r, ...draft } : r));
-    }, [setRows, localEditRef]);
-
-    // Batch row updates
-    const updateRows = useCallback((updates: Array<{ id: string; draft: Partial<InitiativeItem> }>) => {
-        localEditRef.current = true;
-        setRows(prev => prev.map(r => {
-            const update = updates.find(u => u.id === r.id);
-            return update ? { ...r, ...update.draft } : r;
-        }));
-    }, [setRows, localEditRef]);
+    const updateRow = useCallback((id: string, patch: CombatantPatch) => {
+        encounterStore.patch(id, patch).catch(console.error);
+    }, []);
 
     return {
-        // Raw state
-        rows,
-        setRows,
+        combatants,
+        groups,
         started,
-        setStarted,
         round,
-        setRound,
         settings,
         setSettings,
-        saveSceneState,
         cmTokens,
         expandedIds,
         toggleExpanded,
-        localEditRef,
-        groups,
-        // Derived state
-        sortedRows,
-        activeItem,
         visibleRows,
         initiativeTokens,
-        initiativeItemIds,
-
-        // Actions
         updateRow,
-        updateRows,
     };
 }

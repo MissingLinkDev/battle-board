@@ -12,17 +12,15 @@ import PlayArrowRounded from "@mui/icons-material/PlayArrowRounded";
 import PauseRounded from "@mui/icons-material/PauseRounded";
 import ScatterPlotRounded from "@mui/icons-material/ScatterPlotRounded";
 
-import type { Group } from "./SceneState";
-import type { InitiativeItem } from "./InitiativeItem";
+import type { Group } from "../encounter";
+import type { Combatant, CombatantPatch } from "../encounter";
 import type { InitiativeSettings } from "./SceneState";
 import type { CMToken } from "./tokens";
 import { CommitNumberField } from "./CommitFields";
 import InitiativeRow from "./InitiativeRow";
-import { updateGroupInitiative, setGroupActive, setGroupStaged } from "./SceneState";
-import { removeTokenFromGroup, updateGroupTokensVisibility, batchUpdateMeta } from "./metadata";
+import { encounterStore } from "../encounter";
 import { useContextMenu } from "../hooks/useContextMenu";
 import { GroupRowContextMenu } from "./GroupRowContextMenu";
-import OBR from "@owlbear-rodeo/sdk";
 
 type RowSettings = {
     showMovementRange: boolean;
@@ -37,10 +35,10 @@ type RowSettings = {
 
 type Props = {
     group: Group;
-    items: InitiativeItem[];
+    items: Combatant[];
     expanded?: boolean;
     onToggleExpand?: () => void;
-    onRowChange: (id: string, draft: Partial<InitiativeItem>) => void;
+    onRowChange: (id: string, draft: CombatantPatch) => void;
     onRowRemove: (id: string) => void;
     settings: RowSettings;
     globalSettings: InitiativeSettings;
@@ -96,12 +94,8 @@ export default function GroupRow({
         conc: settings?.showConc ?? false,
     }), [settings]);
 
-    const handleInitiativeChange = async (newInitiative: number) => {
-        try {
-            await updateGroupInitiative(group.id, newInitiative);
-        } catch (error) {
-            console.error("Failed to update group initiative:", error);
-        }
+    const handleInitiativeChange = (newInitiative: number) => {
+        encounterStore.setGroupInitiative(group.id, newInitiative).catch(console.error);
     };
 
     const handleToggleStaging = async () => {
@@ -110,57 +104,10 @@ export default function GroupRow({
         try {
             const newStaged = !staged;
             const wasActive = group.active || items.some(item => item.active);
-
-            // If we're staging an active group during combat, we need special handling
-            if (newStaged && wasActive && started) {
-                // First, clear the active state from this group and its members
-                await setGroupActive(group.id, false);
-
-                // Clear active state from all group members in metadata
-                const memberPatches = items.map(item => ({
-                    id: item.id,
-                    patch: { active: false }
-                }));
-                await batchUpdateMeta(OBR, memberPatches);
-
-                // Update local state to reflect members are no longer active
-                items.forEach(item => {
-                    onRowChange(item.id, { active: false });
-                });
-            }
-
-            // Update the group's staged status
-            await setGroupStaged(group.id, newStaged);
-
-            // Handle visibility if the setting is enabled
-            if (globalSettings.groupStagingControlsVisibility) {
-                if (newStaged) {
-                    // Staging: hide tokens
-                    await updateGroupTokensVisibility(OBR, group.id, false);
-                } else {
-                    // Unstaging: show tokens  
-                    await updateGroupTokensVisibility(OBR, group.id, true);
-                }
-            }
-
-            // If unstaging (adding to active initiative), ensure group is not active yet
-            if (!newStaged) {
-                await setGroupActive(group.id, false);
-
-                // Ensure members don't have lingering active state
-                const memberPatches = items.map(item => ({
-                    id: item.id,
-                    patch: { active: false }
-                }));
-                await batchUpdateMeta(OBR, memberPatches);
-
-                // Update local state
-                items.forEach(item => {
-                    onRowChange(item.id, { active: false });
-                });
-            }
-
-            // Notify parent - let it handle turn advancement if needed
+            await encounterStore.setGroupStaged(group.id, newStaged, {
+                controlVisibility: !!globalSettings.groupStagingControlsVisibility,
+            });
+            // Parent advances the turn if the active group was staged mid-combat
             onGroupStagingToggle(group.id, newStaged, wasActive && started);
         } catch (error) {
             console.error("Failed to toggle group staging:", error);
@@ -171,14 +118,7 @@ export default function GroupRow({
         if (!onGroupUngroup) return;
 
         try {
-            // Remove all items from the group
-            const itemIds = items.map(item => item.id);
-            for (const itemId of itemIds) {
-                await removeTokenFromGroup(OBR, itemId);
-                // Update local state
-                onRowChange(itemId, { groupId: null });
-            }
-
+            await encounterStore.ungroup(group.id);
             onGroupUngroup(group.id);
         } catch (error) {
             console.error("Failed to ungroup items:", error);
