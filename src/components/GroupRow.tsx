@@ -45,7 +45,6 @@ type Props = {
     started: boolean;
     tokens: CMToken[];
     colSpan?: number;
-    ready?: boolean;
     groups: Group[];
     expandedIds: Set<string>;
     onToggleItemExpand: (id: string) => void;
@@ -66,7 +65,6 @@ export default function GroupRow({
     started,
     tokens,
     colSpan,
-    ready = true,
     groups,
     expandedIds,
     onToggleItemExpand,
@@ -298,7 +296,6 @@ export default function GroupRow({
                     tokens={tokens}
                     items={items}
                     colSpan={colSpan}
-                    ready={ready}
                     groups={groups}
                     hideInitiative={true}
                 />

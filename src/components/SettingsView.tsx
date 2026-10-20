@@ -18,9 +18,7 @@ import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
 
 import type { InitiativeSettings } from "../settings";
-import { META_KEY, isMetadata } from "./metadata";
 import { encounterStore } from "../encounter";
-import { ensureRings, clearRings } from "./rings";
 import type { Combatant } from "../encounter";
 import CircularProgress from "@mui/material/CircularProgress";
 
@@ -32,22 +30,6 @@ type Props = {
     onChange: (patch: Partial<InitiativeSettings>) => void;
     onBack: () => void;
     rows?: Combatant[];
-    ready?: boolean;
-};
-
-type MetaForRings = {
-    movement?: number;
-    attackRange?: number;
-    playerCharacter?: boolean;
-
-    movementColor?: string | null;
-    rangeColor?: string | null;
-    movementWeight?: number | null;
-    rangeWeight?: number | null;
-    movementPattern?: "solid" | "dash" | null;
-    rangePattern?: "solid" | "dash" | null;
-    movementOpacity?: number | null; // 0..1
-    rangeOpacity?: number | null; // 0..1
 };
 
 /* ------------------------------------------------------------------ */
@@ -206,7 +188,7 @@ function ConfirmProgress({ value, size = 18 }: { value: number; size?: number })
 /* Component                                                           */
 /* ------------------------------------------------------------------ */
 
-export default function SettingsView({ value, onChange, onBack, rows, ready = true }: Props) {
+export default function SettingsView({ value, onChange, onBack, rows }: Props) {
     const rootRef = useRef<HTMLDivElement | null>(null);
     const hasInitiative = (rows?.length ?? 0) > 0;
 
@@ -282,66 +264,6 @@ export default function SettingsView({ value, onChange, onBack, rows, ready = tr
             ro.disconnect();
         };
     }, []);
-
-    // --- Keep your rings sync effect
-    useEffect(() => {
-        let cancelled = false;
-
-        const refreshRingsFromSettings = async () => {
-            try {
-                if (!ready) return;
-                if (!value.showRangeRings || (!value.showMovementRange && !value.showAttackRange)) {
-                    await clearRings("normal");
-                    return;
-                }
-
-                const items = await OBR.scene.items.getItems();
-                if (cancelled) return;
-
-                const active = items.find((it: any) => {
-                    const meta = (it.metadata as any)?.[META_KEY];
-                    return isMetadata?.(meta) && meta.active === true;
-                });
-
-                if (!active) {
-                    await clearRings("normal");
-                    return;
-                }
-
-                const meta = ((active.metadata as any)[META_KEY] ?? {}) as MetaForRings;
-
-                if (!meta?.playerCharacter) {
-                    await clearRings("normal");
-                    return;
-                }
-
-                await ensureRings({
-                    tokenId: active.id,
-                    variant: "normal",
-                    visible: true,
-                    moveAttached: false,
-                    rangeAttached: true,
-                    movement: value.showMovementRange ? (meta.movement ?? 0) : 0,
-                    attackRange: value.showAttackRange ? (meta.attackRange ?? 0) : 0,
-                    movementColor: meta.movementColor ?? "#519e00",
-                    rangeColor: meta.rangeColor ?? "#fe4c50",
-                    movementWeight: meta.movementWeight ?? 12,
-                    rangeWeight: meta.rangeWeight ?? 12,
-                    movementPattern: meta.movementPattern ?? "dash",
-                    rangePattern: meta.rangePattern ?? "dash",
-                    movementOpacity: meta.movementOpacity ?? 1,
-                    rangeOpacity: meta.rangeOpacity ?? 1,
-                });
-            } catch (err) {
-                console.error("Failed to refresh rings from settings:", err);
-            }
-        };
-
-        refreshRingsFromSettings();
-        return () => {
-            cancelled = true;
-        };
-    }, [value.showMovementRange, value.showAttackRange, value.showRangeRings]);
 
     const handleClearAll = () => {
         encounterStore.clearAll().catch((err) => console.error("Failed to clear initiative list:", err));

@@ -20,7 +20,6 @@ import { RingControls } from "./RingControls";
 import type { CMToken } from "./tokens";
 import { useDistances } from "../hooks/useDistances";
 import { useRingState } from "../hooks/useRingState";
-import { useRingManager } from "../hooks/useRingsManager";
 import type { InitiativeSettings } from "../settings";
 import type { Group } from "../encounter";
 import { useContextMenu } from "../hooks/useContextMenu";
@@ -53,7 +52,6 @@ type Props = {
     tokens: CMToken[];
     items?: Combatant[];
     colSpan?: number;
-    ready?: boolean;
     groups: Group[];
     hideInitiative?: boolean;
 };
@@ -72,7 +70,6 @@ export default function InitiativeRow({
     items,
     started,
     colSpan,
-    ready = true,
     groups = [],
     hideInitiative = false, // NEW: Default to false
 }: Props) {
@@ -94,17 +91,6 @@ export default function InitiativeRow({
     const distances = useDistances(row.id, tokens, settings?.showDistances, "box", items, globalSettings.roundDistances);
     const { config } = useRingState(row);
 
-    // DM preview ring management only
-    // Global rings are managed centrally at GMTable level to avoid conflicts
-    useRingManager({
-        tokenId: row.id,
-        active: row.active,
-        started,
-        playerCharacter: !!row.playerCharacter,
-        showGlobalRings: false, // Disabled - managed centrally at GMTable
-        showDmPreview: dmPreview,
-        ready,
-    }, config);
 
     const inputSx = useMemo(() => ({
         "& .MuiOutlinedInput-root": { borderRadius: 0.25, height: 28, p: 0 },

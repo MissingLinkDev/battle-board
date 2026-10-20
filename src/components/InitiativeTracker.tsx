@@ -17,7 +17,7 @@ import { encounterStore } from "../encounter";
 import { runSavedDataMigrations } from "../settings/migrations";
 import { obrAdapter } from "../obr/obrAdapter";
 import { registerInitiativeContextMenu } from "./initiativeMenu";
-import { useRingCoordinatorCleanup } from "../hooks/useRingCoordinator";
+import { useRingSync } from "../hooks/useRingSync";
 import { useConcentrationNotifications } from "../hooks/useConcentrationNotifications";
 import { useElevationLabels } from "../hooks/useElevationLabels";
 
@@ -43,7 +43,7 @@ export function InitiativeTracker() {
         toggleExpanded,
     } = useInitiativeState();
 
-    useRingCoordinatorCleanup(started, ready);
+    useRingSync(ready);
     useElevationLabels(ready);
     const { checks, dismiss } = useConcentrationNotifications();
 
@@ -168,7 +168,6 @@ export function InitiativeTracker() {
                             }}
                             groups={groups}
                             onRequestResize={kickMeasure}
-                            ready={ready}
                         />
                     </Box>
                 ) : (
@@ -226,7 +225,6 @@ export function InitiativeTracker() {
                         onChange={setSettings}
                         onBack={() => setView("tracker")}
                         rows={combatants}
-                        ready={ready}
                     />
                 </Box>
             )}

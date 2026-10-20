@@ -369,7 +369,7 @@ export function createEncounterStore(port: ObrPort) {
     };
 }
 
-function readClock(metadata: Record<string, unknown>): { started: boolean; round: number } {
+export function readClock(metadata: Record<string, unknown>): { started: boolean; round: number } {
     const raw = metadata[SCENE_META_KEY] as { started?: unknown; round?: unknown } | undefined;
     return {
         started: raw?.started === true,
@@ -377,7 +377,8 @@ function readClock(metadata: Record<string, unknown>): { started: boolean; round
     };
 }
 
-function combatantsOf(items: Item[]): Combatant[] {
+/** Combatants in the scene, unordered. */
+export function combatantsOf(items: Item[]): Combatant[] {
     const list: Combatant[] = [];
     for (const item of items) {
         if (!isImage(item)) continue;

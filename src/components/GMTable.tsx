@@ -22,10 +22,9 @@ import type { Combatant, CombatantPatch } from "../encounter";
 import type { InitiativeSettings } from "../settings";
 import type { Group } from "../encounter";
 import type { CMToken } from "./tokens";
-import { useMemo, useEffect } from "react";
+import { useMemo } from "react";
 import { canPrev, stagedGroups, turnOrder, type Turn } from "../encounter/turnOrder";
 import StopRounded from "@mui/icons-material/StopRounded";
-import { useRingCoordinatorCleanup, ringCoordinator } from "../hooks/useRingCoordinator";
 
 type Props = {
     items: Combatant[];
@@ -47,7 +46,6 @@ type Props = {
     tokens: CMToken[];
     onAddAll: (includeHidden: boolean) => void;
     onOpenSettings: () => void;
-    ready?: boolean;
     groups: Group[];
     /** Ask parent to re-measure the action panel (optional) */
     onRequestResize?: () => void;
@@ -81,7 +79,6 @@ export default function GmTable({
     tokens,
     onAddAll,
     onOpenSettings,
-    ready = true,
     groups,
     onRequestResize,
 }: Props) {
@@ -91,57 +88,6 @@ export default function GmTable({
     const showConc = settings.showConcentration;
 
     const gmColCount = 3 + (showAC ? 1 : 0) + (showHP ? 2 : 0) + (showConc ? 1 : 0) + (showDMR ? 1 : 0);
-
-    // Ring coordinator cleanup when initiative ends
-    useRingCoordinatorCleanup(started, ready);
-
-    // Update ring coordinator's global settings when they change
-    useEffect(() => {
-        ringCoordinator.setGlobalSettings({
-            showGlobalRings: globalSettings.showRangeRings,
-            started,
-        });
-    }, [globalSettings?.showRangeRings, started]);
-
-    // Create stable dependency key for ring-relevant properties
-    const ringStateKey = useMemo(() => {
-        return items
-            .map(i => `${i.id}:${i.active}:${i.playerCharacter}:${i.movement}:${i.attackRange}:${i.movementColor}:${i.rangeColor}:${i.movementWeight}:${i.rangeWeight}:${i.movementPattern}:${i.rangePattern}:${i.movementOpacity}:${i.rangeOpacity}`)
-            .join('|');
-    }, [items]);
-
-    // Update rings when active items or their properties change
-    useEffect(() => {
-        if (!started || !ready) return;
-
-        // Build list of active PC token IDs and their ring configs
-        const activeTokenIds: string[] = [];
-        const ringConfigs = new Map();
-
-        for (const item of items) {
-            if (item.active && item.playerCharacter) {
-                activeTokenIds.push(item.id);
-                ringConfigs.set(item.id, {
-                    movement: item.movement ?? 30,
-                    attackRange: item.attackRange ?? 60,
-                    movementStyle: {
-                        color: item.movementColor ?? "#519e00",
-                        weight: item.movementWeight ?? 10,
-                        pattern: item.movementPattern ?? "dash",
-                        opacity: item.movementOpacity ?? 1,
-                    },
-                    rangeStyle: {
-                        color: item.rangeColor ?? "#fe4c50",
-                        weight: item.rangeWeight ?? 10,
-                        pattern: item.rangePattern ?? "dash",
-                        opacity: item.rangeOpacity ?? 1,
-                    },
-                });
-            }
-        }
-
-        ringCoordinator.setActiveTokens(activeTokenIds, ringConfigs);
-    }, [ringStateKey, started, ready]);
 
     // Display order is the turn order, by construction.
     const { activeRenderItems, stagedRenderItems } = useMemo(() => {
@@ -252,7 +198,6 @@ export default function GmTable({
                                     tokens={tokens}
                                     colSpan={gmColCount}
                                     groups={groups}
-                                    ready={ready}
                                     expandedIds={expandedIds}
                                     onToggleItemExpand={(itemId) => {
                                         onToggleExpand(itemId);
@@ -291,7 +236,6 @@ export default function GmTable({
                                     items={items}
                                     colSpan={gmColCount}
                                     groups={groups}
-                                    ready={ready}
                                     hideInitiative={false}
                                 />
                             );
@@ -508,7 +452,6 @@ export default function GmTable({
                                             tokens={tokens}
                                             colSpan={gmColCount}
                                             groups={groups}
-                                            ready={ready}
                                             expandedIds={expandedIds}
                                             onToggleItemExpand={(itemId) => {
                                                 onToggleExpand(itemId);
