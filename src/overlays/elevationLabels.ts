@@ -1,6 +1,7 @@
 import { isImage, type Item, type Vector2 } from "@owlbear-rodeo/sdk";
 import { readMeta } from "../components/metadata";
 import { getPluginId } from "../getPluginId";
+import { footprintCells } from "../battlefield/footprint";
 
 /**
  * Elevation labels: one text label attached to each token whose elevation is
@@ -88,12 +89,8 @@ function hasLabelMarker(item: Item): boolean {
     return !!marker?.__elevationLabel__;
 }
 
-/** Just inside the top edge of the token. */
+/** Just inside the top edge of the token's footprint. */
 function labelPosition(token: Item, grid: GridInfo): Vector2 {
     const center = token.position;
-    if (!isImage(token)) return { x: center.x, y: center.y - 50 };
-    const dpi = token.grid?.dpi ?? grid.dpi;
-    const cellsH = (token.image?.height ?? dpi) / dpi;
-    const scaleY = Math.abs(token.scale?.y ?? 1);
-    return { x: center.x, y: center.y - (grid.dpi / 2) * cellsH * scaleY + LABEL_HEIGHT_ESTIMATE };
+    return { x: center.x, y: center.y - (footprintCells(token).h * grid.dpi) / 2 + LABEL_HEIGHT_ESTIMATE };
 }
