@@ -19,7 +19,7 @@ import Tooltip from "@mui/material/Tooltip";
 import SettingsRounded from "@mui/icons-material/SettingsRounded";
 
 import type { Combatant, CombatantPatch } from "../encounter";
-import type { InitiativeSettings } from "./SceneState";
+import type { InitiativeSettings } from "../settings";
 import type { Group } from "../encounter";
 import type { CMToken } from "./tokens";
 import { useMemo, useEffect } from "react";
@@ -88,7 +88,7 @@ export default function GmTable({
     const showAC = settings.showArmor;
     const showHP = settings.showHP;
     const showDMR = settings.dmRingToggle;
-    const showConc = settings.showConcentration ?? false;
+    const showConc = settings.showConcentration;
 
     const gmColCount = 3 + (showAC ? 1 : 0) + (showHP ? 2 : 0) + (showConc ? 1 : 0) + (showDMR ? 1 : 0);
 
@@ -98,7 +98,7 @@ export default function GmTable({
     // Update ring coordinator's global settings when they change
     useEffect(() => {
         ringCoordinator.setGlobalSettings({
-            showGlobalRings: globalSettings?.showRangeRings ?? false,
+            showGlobalRings: globalSettings.showRangeRings,
             started,
         });
     }, [globalSettings?.showRangeRings, started]);

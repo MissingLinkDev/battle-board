@@ -19,7 +19,7 @@ import { playerCanEditHP, playerHealthMode } from "../encounter/health";
 import { useHPEditing } from "../hooks/useHPEditing";
 import { CommitNumberField } from "./CommitFields";
 import type { CMToken } from "./tokens";
-import type { InitiativeSettings } from "./SceneState";
+import type { InitiativeSettings } from "../settings";
 import { focusToken } from "./focusToken";
 
 type Props = {
@@ -50,7 +50,7 @@ export default function PlayerRow({
     const prevActiveRef = useRef(row.active);
 
     // Centralized hooks
-    const distances = useDistances(row.id, tokens, settings.showDistances, "box", items, settings.roundDistances ?? false);
+    const distances = useDistances(row.id, tokens, settings.showDistances, "box", items, settings.roundDistances);
     const healthMode = playerHealthMode(row, settings);
     const canEditHP = playerCanEditHP(row, settings);
 

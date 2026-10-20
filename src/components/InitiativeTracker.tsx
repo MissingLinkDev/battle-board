@@ -14,6 +14,8 @@ import { useResizeToOBR } from "../hooks/useResizeToOBR";
 import { useInitiativeState } from "../hooks/useInitiativeState";
 import { useTurns } from "../actions/useTurns";
 import { encounterStore } from "../encounter";
+import { runSavedDataMigrations } from "../settings/migrations";
+import { obrAdapter } from "../obr/obrAdapter";
 import { registerInitiativeContextMenu } from "./initiativeMenu";
 import { useRingCoordinatorCleanup } from "../hooks/useRingCoordinator";
 import { useConcentrationNotifications } from "../hooks/useConcentrationNotifications";
@@ -77,6 +79,11 @@ export function InitiativeTracker() {
 
     // Initialize context menu
     useEffect(() => registerInitiativeContextMenu(), []);
+
+    // Move data saved by older versions (GM only; the tracker mounts once per opened scene)
+    useEffect(() => {
+        runSavedDataMigrations(obrAdapter).catch(console.error);
+    }, []);
 
     return (
         <Box

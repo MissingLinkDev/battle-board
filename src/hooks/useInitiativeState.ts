@@ -1,15 +1,15 @@
 import { useCallback, useMemo, useState } from "react";
-import { useSceneStateSync } from "./useSceneStateSync";
 import { useCMTokens } from "../components/useCMTokens";
 import { encounterStore, useEncounter, type CombatantPatch } from "../encounter";
+import { settingsStore, useSettings, type InitiativeSettings } from "../settings";
 
 /**
  * Everything the tracker renders: the encounter (from the Encounter store),
- * room settings, token geometry, and which rows are expanded.
+ * room settings (Settings store), token geometry, and which rows are expanded.
  */
 export function useInitiativeState() {
     const { combatants, groups, started, round } = useEncounter();
-    const { settings, setSettings } = useSceneStateSync();
+    const { settings } = useSettings();
     const cmTokens = useCMTokens();
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
@@ -33,6 +33,10 @@ export function useInitiativeState() {
         cmTokens.filter(t => initiativeItemIds.has(t.id)),
         [cmTokens, initiativeItemIds]
     );
+
+    const setSettings = useCallback((patch: Partial<InitiativeSettings>) => {
+        settingsStore.update(patch).catch(console.error);
+    }, []);
 
     const updateRow = useCallback((id: string, patch: CombatantPatch) => {
         encounterStore.patch(id, patch).catch(console.error);

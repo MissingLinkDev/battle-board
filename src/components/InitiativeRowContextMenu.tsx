@@ -6,7 +6,7 @@ import ListItemText from "@mui/material/ListItemText";
 import GroupAddRounded from "@mui/icons-material/GroupAddRounded";
 import DeleteForeverRounded from "@mui/icons-material/DeleteForeverRounded";
 import type { Combatant } from "../encounter";
-import type { InitiativeSettings } from "./SceneState";
+import type { InitiativeSettings } from "../settings";
 import type { Group } from "../encounter";
 import { encounterStore } from "../encounter";
 import { GroupSelectionDialog } from "./GroupSelectionDialog";

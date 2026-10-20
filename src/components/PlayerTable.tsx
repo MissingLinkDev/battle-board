@@ -10,7 +10,7 @@ import type { Combatant, CombatantPatch } from "../encounter";
 import PlayerRow from "./PlayerRow";
 import { playerCanEditHP, showPlayerHealthColumn } from "../encounter/health";
 import type { CMToken } from "./tokens";
-import type { InitiativeSettings } from "./SceneState";
+import type { InitiativeSettings } from "../settings";
 
 type PlayerTableProps = {
     items: Combatant[];

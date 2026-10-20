@@ -17,7 +17,7 @@ import ExpandMoreRounded from "@mui/icons-material/ExpandMoreRounded";
 import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
 
-import type { InitiativeSettings } from "./SceneState";
+import type { InitiativeSettings } from "../settings";
 import { META_KEY, isMetadata } from "./metadata";
 import { encounterStore } from "../encounter";
 import { ensureRings, clearRings } from "./rings";
@@ -29,7 +29,7 @@ import CircularProgress from "@mui/material/CircularProgress";
 /* ------------------------------------------------------------------ */
 type Props = {
     value: InitiativeSettings;
-    onChange: (next: InitiativeSettings) => void;
+    onChange: (patch: Partial<InitiativeSettings>) => void;
     onBack: () => void;
     rows?: Combatant[];
     ready?: boolean;
@@ -210,7 +210,7 @@ export default function SettingsView({ value, onChange, onBack, rows, ready = tr
     const rootRef = useRef<HTMLDivElement | null>(null);
     const hasInitiative = (rows?.length ?? 0) > 0;
 
-    const set = (patch: Partial<InitiativeSettings>) => onChange({ ...value, ...patch });
+    const set = (patch: Partial<InitiativeSettings>) => onChange(patch);
 
     // Local expansion state for sub-categories
     const [openDisplayColumns, setOpenDisplayColumns] = useState(false);
@@ -348,8 +348,7 @@ export default function SettingsView({ value, onChange, onBack, rows, ready = tr
     };
 
     // Resolve UI defaults without forcing state writes yet
-    const pcHealthMode = ((value as any).pcHealthMode ?? "numbers") as "none" | "status" | "numbers";
-    const npcHealthMode = ((value as any).npcHealthMode ?? "status") as "none" | "status" | "numbers";
+    const { pcHealthMode, npcHealthMode } = value;
 
     return (
         <Paper ref={rootRef} sx={{ borderRadius: 0, overflowX: "hidden" }}>
@@ -487,7 +486,7 @@ export default function SettingsView({ value, onChange, onBack, rows, ready = tr
                                                 right={
                                                     <HealthModeSelect
                                                         value={pcHealthMode}
-                                                        onChange={(next) => set({ pcHealthMode: next } as any)}
+                                                        onChange={(next) => set({ pcHealthMode: next })}
                                                     />
                                                 }
                                             />
@@ -498,7 +497,7 @@ export default function SettingsView({ value, onChange, onBack, rows, ready = tr
                                                 right={
                                                     <HealthModeSelect
                                                         value={npcHealthMode}
-                                                        onChange={(next) => set({ npcHealthMode: next } as any)}
+                                                        onChange={(next) => set({ npcHealthMode: next })}
                                                     />
                                                 }
                                             />

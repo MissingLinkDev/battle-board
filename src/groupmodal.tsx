@@ -15,7 +15,7 @@ import InputLabel from "@mui/material/InputLabel";
 import { PluginGate } from "./PluginGate";
 import { PluginThemeProvider } from "./PluginThemeProvider";
 import { getPluginId } from "./getPluginId";
-import { readRoomSettings } from "./components/SceneState";
+import { settingsStore } from "./settings";
 import { encounterStore, useEncounter, type GroupTarget } from "./encounter";
 import "./styles/index.css";
 
@@ -45,9 +45,9 @@ function GroupModal() {
 
     const addTokens = async (target: GroupTarget) => {
         try {
-            const settings = await readRoomSettings();
+            const settings = await settingsStore.read();
             await encounterStore.addToGroup(tokenIds, target, {
-                hideWhenStaged: !!settings?.groupStagingControlsVisibility,
+                hideWhenStaged: settings.groupStagingControlsVisibility,
             });
         } catch (error) {
             console.error("Failed to add tokens to group:", error);

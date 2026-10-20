@@ -1,7 +1,7 @@
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import type { Combatant } from "../encounter";
-import type { HealthMode } from "./SceneState";
+import type { HealthMode } from "../settings";
 import { status } from "../encounter/health";
 
 type Props = {

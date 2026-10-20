@@ -14,7 +14,7 @@ import ScatterPlotRounded from "@mui/icons-material/ScatterPlotRounded";
 
 import type { Group } from "../encounter";
 import type { Combatant, CombatantPatch } from "../encounter";
-import type { InitiativeSettings } from "./SceneState";
+import type { InitiativeSettings } from "../settings";
 import type { CMToken } from "./tokens";
 import { CommitNumberField } from "./CommitFields";
 import InitiativeRow from "./InitiativeRow";

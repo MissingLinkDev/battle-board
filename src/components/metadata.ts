@@ -149,21 +149,3 @@ export function readMeta(item: Item): MetaShape | null {
     }
     return meta;
 }
-
-/** Batch patch by id. */
-export function batchUpdateMeta(
-    OBR: any,
-    patches: { id: string; patch: Partial<MetaShape> }[]
-): Promise<void> {
-    if (patches.length === 0) return Promise.resolve();
-    const ids = patches.map((p) => p.id);
-    return OBR.scene.items.updateItems(ids, (items: Item[]) => {
-        for (const it of items) {
-            const p = patches.find((x) => x.id === it.id)?.patch;
-            if (!p) continue;
-            const meta = ((it.metadata as any)[META_KEY] ?? createMetaForItem(it)) as MetaShape;
-            Object.assign(meta, p);
-            (it.metadata as any)[META_KEY] = meta;
-        }
-    });
-}

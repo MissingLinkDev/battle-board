@@ -21,7 +21,7 @@ import type { CMToken } from "./tokens";
 import { useDistances } from "../hooks/useDistances";
 import { useRingState } from "../hooks/useRingState";
 import { useRingManager } from "../hooks/useRingsManager";
-import type { InitiativeSettings } from "./SceneState";
+import type { InitiativeSettings } from "../settings";
 import type { Group } from "../encounter";
 import { useContextMenu } from "../hooks/useContextMenu";
 import { useHPEditing } from "../hooks/useHPEditing";
@@ -91,7 +91,7 @@ export default function InitiativeRow({
     const dmPreview = !!row.dmPreview;
 
     // Centralized hooks
-    const distances = useDistances(row.id, tokens, settings?.showDistances, "box", items, globalSettings.roundDistances ?? false);
+    const distances = useDistances(row.id, tokens, settings?.showDistances, "box", items, globalSettings.roundDistances);
     const { config } = useRingState(row);
 
     // DM preview ring management only

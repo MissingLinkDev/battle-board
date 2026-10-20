@@ -1,4 +1,4 @@
-import type { HealthMode, InitiativeSettings } from "../components/SceneState";
+import type { HealthMode, InitiativeSettings } from "../settings/settings";
 import type { BroadcastDestination } from "../obr/port";
 import type { Combatant, CombatantPatch } from "./combatant";
 
@@ -67,7 +67,7 @@ type HealthSettings = Pick<InitiativeSettings, "displayHealthStatusToPlayer" | "
 /** What players may see of this combatant's health. */
 export function playerHealthMode(c: Pick<Combatant, "playerCharacter">, settings: HealthSettings): HealthMode {
     if (!settings.displayHealthStatusToPlayer) return "none";
-    return c.playerCharacter ? (settings.pcHealthMode ?? "numbers") : (settings.npcHealthMode ?? "status");
+    return c.playerCharacter ? settings.pcHealthMode : settings.npcHealthMode;
 }
 
 /** Whether players see a health column at all. */
@@ -78,7 +78,7 @@ export function showPlayerHealthColumn(settings: HealthSettings): boolean {
 
 /** The one rule for player HP editing: enabled, a PC, and PC health shown as numbers. */
 export function playerCanEditHP(c: Pick<Combatant, "playerCharacter">, settings: HealthSettings): boolean {
-    return !!settings.playerEditableHealth && c.playerCharacter && playerHealthMode(c, settings) === "numbers";
+    return settings.playerEditableHealth && c.playerCharacter && playerHealthMode(c, settings) === "numbers";
 }
 
 /**
