@@ -15,7 +15,7 @@ import type { Combatant, CombatantPatch } from "../encounter";
 import { HealthDisplay } from "./HealthDisplay";
 import { DistancePanel } from "./DistancePanel";
 import { useDistances } from "../hooks/useDistances";
-import { useHealthLogic } from "../hooks/useHealthLogic";
+import { playerCanEditHP, playerHealthMode } from "../encounter/health";
 import { useHPEditing } from "../hooks/useHPEditing";
 import { CommitNumberField } from "./CommitFields";
 import type { CMToken } from "./tokens";
@@ -29,7 +29,8 @@ type Props = {
     tokens: CMToken[];
     items?: Combatant[];
     colSpan?: number;
-    showHealthColumn?: boolean;
+    showHealthColumn: boolean;
+    showTempColumn: boolean;
     updateRow?: (id: string, patch: CombatantPatch) => void;
 };
 
@@ -41,6 +42,7 @@ export default function PlayerRow({
     items,
     colSpan,
     showHealthColumn,
+    showTempColumn,
     updateRow,
 }: Props) {
     const [open, setOpen] = useState(false);
@@ -48,9 +50,9 @@ export default function PlayerRow({
     const prevActiveRef = useRef(row.active);
 
     // Centralized hooks
-    const { getHealthInfo } = useHealthLogic(settings);
     const distances = useDistances(row.id, tokens, settings.showDistances, "box", items, settings.roundDistances ?? false);
-    const healthInfo = getHealthInfo(row);
+    const healthMode = playerHealthMode(row, settings);
+    const canEditHP = playerCanEditHP(row, settings);
 
     // Health editing hook
     const onChange = (patch: CombatantPatch) => {
@@ -61,7 +63,7 @@ export default function PlayerRow({
         setEditingField,
         commitCurrentHP,
         commitTempHP,
-    } = useHPEditing(row, false, onChange); // false = not started check (players always edit same way)
+    } = useHPEditing(row, false, onChange); // players cannot edit max HP, the only rule that depends on combat
 
     // Styling for input fields to match DM view
     const inputSx = {
@@ -127,7 +129,6 @@ export default function PlayerRow({
     }, [row.id]);
 
     const isActive = row.active;
-    const computedShowHealthColumn = showHealthColumn ?? healthInfo.showColumn;
 
     // Double-click to focus viewport on token; single-click still toggles expand
     const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -264,9 +265,9 @@ export default function PlayerRow({
                 </TableCell>
 
                 {/* Health */}
-                {computedShowHealthColumn && (
+                {showHealthColumn && (
                     <TableCell width={62} align="center" onClick={(e) => e.stopPropagation()} sx={{ cursor: "default" }}>
-                        {settings.playerEditableHealth && row.playerCharacter && healthInfo.mode === "numbers" ? (
+                        {canEditHP ? (
                             <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, height: 28 }}>
                                 {/* CURRENT */}
                                 {editingField === "cur" ? (
@@ -315,14 +316,14 @@ export default function PlayerRow({
                                 </Typography>
                             </Box>
                         ) : (
-                            <HealthDisplay row={row} healthInfo={healthInfo} variant="compact" />
+                            <HealthDisplay row={row} mode={healthMode} variant="compact" />
                         )}
                     </TableCell>
                 )}
 
-                {/* TEMP HP - separate column, always shown when editable */}
-                {computedShowHealthColumn && (
-                    settings.playerEditableHealth && row.playerCharacter && healthInfo.mode === "numbers" ? (
+                {/* TEMP HP - own column whenever any row is editable; empty for rows that are not */}
+                {showTempColumn && (
+                    canEditHP ? (
                         <TableCell width={36} align="center" onClick={(e) => e.stopPropagation()} sx={{ cursor: "default" }}>
                             <Box sx={{ display: "inline-flex", alignItems: "center", justifyContent: "center", height: 28 }}>
                                 {editingField === "temp" ? (
@@ -360,7 +361,7 @@ export default function PlayerRow({
                                 )}
                             </Box>
                         </TableCell>
-                    ) : null
+                    ) : <TableCell width={36} />
                 )}
             </TableRow>
 

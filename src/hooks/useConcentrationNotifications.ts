@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import OBR from "@owlbear-rodeo/sdk";
+import { CONCENTRATION_CHANNEL, type ConcentrationMessage } from "../encounter/concentration";
 
 export type ConcentrationCheck = {
     tokenId: string;
@@ -7,16 +8,13 @@ export type ConcentrationCheck = {
     dc: number;
 };
 
-type ConcentrationMessage =
-    | { type: "CHECK_NEEDED"; tokenId: string; tokenName: string; dc: number }
-    | { type: "DISMISS"; tokenId: string };
 
 export function useConcentrationNotifications() {
     const [checks, setChecks] = useState<ConcentrationCheck[]>([]);
 
     useEffect(() => {
         const unsubscribe = OBR.broadcast.onMessage(
-            "com.battleboard.concentration",
+            CONCENTRATION_CHANNEL,
             (event) => {
                 const message = event.data as ConcentrationMessage;
 
@@ -53,7 +51,7 @@ export function useConcentrationNotifications() {
     const dismiss = (tokenId: string) => {
         // Broadcast dismiss to all clients
         OBR.broadcast.sendMessage(
-            "com.battleboard.concentration",
+            CONCENTRATION_CHANNEL,
             {
                 type: "DISMISS",
                 tokenId,

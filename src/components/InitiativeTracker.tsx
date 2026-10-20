@@ -12,7 +12,6 @@ import GmTable from "./GMTable";
 import { useRole } from "../hooks/useRole";
 import { useResizeToOBR } from "../hooks/useResizeToOBR";
 import { useInitiativeState } from "../hooks/useInitiativeState";
-import { useHealthLogic } from "../hooks/useHealthLogic";
 import { useTurns } from "../actions/useTurns";
 import { encounterStore } from "../encounter";
 import { registerInitiativeContextMenu } from "./initiativeMenu";
@@ -44,7 +43,6 @@ export function InitiativeTracker() {
 
     useRingCoordinatorCleanup(started, ready);
     useElevationLabels(ready);
-    const { showHealthColumn } = useHealthLogic(settings);
     const { checks, dismiss } = useConcentrationNotifications();
 
     // Readiness management
@@ -201,7 +199,6 @@ export function InitiativeTracker() {
                             items={visibleRows}
                             settings={settings}
                             tokens={initiativeTokens}
-                            showHealthColumn={showHealthColumn}
                             updateRow={updateRow}
                         />
                     )

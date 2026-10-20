@@ -1,101 +1,27 @@
 import { useState } from "react";
 import type { Combatant, CombatantPatch } from "../encounter";
-import OBR from "@owlbear-rodeo/sdk";
+import { setCurrent, setMax, setTemp, type HealthChange } from "../encounter/health";
+import { announceConcentrationCheck } from "../encounter/concentration";
+import { obrAdapter } from "../obr/obrAdapter";
 
+/** Which HP/AC cell is being edited, plus commit handlers that apply the Health rules. */
 export function useHPEditing(
     row: Combatant,
-    started: boolean,
+    inCombat: boolean,
     onChange: (patch: CombatantPatch) => void
 ) {
     const [editingField, setEditingField] = useState<null | "cur" | "max" | "temp" | "ac">(null);
 
-    const commitAc = (v: number) => {
-        const next = Math.max(0, v);
-        onChange({ ac: next });
-        setEditingField(null);
-    };
-
-    const commitCurrentHP = (val: number) => {
-        const clampedVal = Math.max(0, Math.min(val, row.maxHP));
-        const damage = row.currentHP - clampedVal;
-
-        if (damage > 0 && row.tempHP > 0) {
-            // Taking damage with temp HP available - absorb with temp HP first
-            const tempHPAbsorbed = Math.min(damage, row.tempHP);
-            const remainingDamage = damage - tempHPAbsorbed;
-            const newCurrentHP = row.currentHP - remainingDamage;
-
-            onChange({
-                tempHP: row.tempHP - tempHPAbsorbed,
-                currentHP: Math.max(0, newCurrentHP)
-            });
-
-            // Check for concentration
-            if (damage > 0 && row.concentrating) {
-                const dc = Math.max(10, Math.floor(damage / 2));
-                OBR.broadcast.sendMessage("com.battleboard.concentration", {
-                    type: "CHECK_NEEDED",
-                    tokenId: row.id,
-                    tokenName: row.name,
-                    dc
-                }, { destination: "ALL" });
-            }
-        } else {
-            // No damage, or no temp HP, or healing
-            onChange({ currentHP: clampedVal });
-
-            // Check for concentration if taking damage
-            if (damage > 0 && row.concentrating) {
-                const dc = Math.max(10, Math.floor(damage / 2));
-                OBR.broadcast.sendMessage("com.battleboard.concentration", {
-                    type: "CHECK_NEEDED",
-                    tokenId: row.id,
-                    tokenName: row.name,
-                    dc
-                }, { destination: "ALL" });
-            }
-        }
-        setEditingField(null);
-    };
-
-    const commitTempHP = (val: number) => {
-        const clampedVal = Math.max(0, val);
-
-        if (val < row.tempHP) {
-            // Subtracting temp HP - check for overflow damage to current HP
-            const requestedDamage = row.tempHP - val; // Can be negative if val < 0
-            const tempHPAbsorbed = Math.min(row.tempHP, Math.max(0, requestedDamage));
-            const overflow = Math.max(0, requestedDamage - row.tempHP);
-            const newCurrentHP = Math.max(0, row.currentHP - overflow);
-
-            onChange({
-                tempHP: row.tempHP - tempHPAbsorbed,
-                currentHP: newCurrentHP
-            });
-        } else {
-            // Adding temp HP or no change
-            onChange({ tempHP: clampedVal });
-        }
-        setEditingField(null);
-    };
-
-    const applyMaxChange = (nextMaxRaw: number) => {
-        const m = Math.max(0, nextMaxRaw);
-        const prevMax = row.maxHP;
-        let nextCur = row.currentHP;
-
-        if (!started) {
-            const delta = m - prevMax;
-            nextCur = row.currentHP + delta;
-            if (nextCur < 0) nextCur = 0;
-            if (nextCur > m) nextCur = m;
-        } else {
-            if (nextCur > m) nextCur = m;
-        }
-
-        const patch: CombatantPatch = { maxHP: m };
-        if (nextCur !== row.currentHP) patch.currentHP = nextCur;
+    const apply = ({ patch, concentrationCheck }: HealthChange) => {
         onChange(patch);
+        if (concentrationCheck) {
+            announceConcentrationCheck(obrAdapter, row, concentrationCheck.dc).catch(console.error);
+        }
+        setEditingField(null);
+    };
+
+    const commitAc = (v: number) => {
+        onChange({ ac: Math.max(0, v) });
         setEditingField(null);
     };
 
@@ -103,8 +29,8 @@ export function useHPEditing(
         editingField,
         setEditingField,
         commitAc,
-        commitCurrentHP,
-        commitTempHP,
-        applyMaxChange,
+        commitCurrentHP: (value: number) => apply(setCurrent(row, value)),
+        commitTempHP: (value: number) => apply(setTemp(row, value)),
+        applyMaxChange: (value: number) => apply(setMax(row, value, { inCombat })),
     };
 }

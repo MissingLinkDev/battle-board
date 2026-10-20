@@ -1,23 +1,23 @@
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import type { Combatant } from "../encounter";
-import type { HealthInfo } from "../hooks/useHealthLogic";
+import type { HealthMode } from "./SceneState";
+import { status } from "../encounter/health";
 
 type Props = {
     row: Combatant;
-    healthInfo: HealthInfo;
+    mode: HealthMode;
     variant?: "compact" | "full";
 };
 
-/**
- * Centralized health display component
- */
-export function HealthDisplay({ row, healthInfo, variant = "compact" }: Props) {
-    const { mode, statusText, isBloodied, isDead } = healthInfo;
-
+/** A combatant's health as players may see it. */
+export function HealthDisplay({ row, mode, variant = "compact" }: Props) {
     if (mode === "none") return null;
 
-    const color = isDead ? "error.main" : (isBloodied ? "warning.main" : "success.main");
+    const statusText = status(row);
+    const color = statusText === "Dead" || statusText === "Dying"
+        ? "error.main"
+        : statusText === "Bloodied" ? "warning.main" : "success.main";
     const fontSize = variant === "compact" ? "0.75rem" : "0.8rem";
 
     if (mode === "status") {
@@ -29,7 +29,7 @@ export function HealthDisplay({ row, healthInfo, variant = "compact" }: Props) {
     }
 
     // Numbers mode
-    const displayText = isDead
+    const displayText = row.currentHP === 0
         ? statusText
         : `${row.currentHP}/${row.maxHP}`;
 

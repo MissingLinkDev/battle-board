@@ -8,6 +8,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import type { Combatant, CombatantPatch } from "../encounter";
 import PlayerRow from "./PlayerRow";
+import { playerCanEditHP, showPlayerHealthColumn } from "../encounter/health";
 import type { CMToken } from "./tokens";
 import type { InitiativeSettings } from "./SceneState";
 
@@ -15,7 +16,6 @@ type PlayerTableProps = {
     items: Combatant[];
     settings: InitiativeSettings;
     tokens: CMToken[];
-    showHealthColumn?: boolean; // Optional override
     updateRow?: (id: string, patch: CombatantPatch) => void;
 };
 
@@ -23,12 +23,12 @@ export default function PlayerTable({
     items,
     settings,
     tokens,
-    showHealthColumn,
     updateRow
 }: PlayerTableProps) {
-    // Calculate column count: base (4) + health (1) + temp HP (1 if editable)
-    const hasEditableHealth = settings.playerEditableHealth && items.some(item => item.playerCharacter);
-    const colCount = 4 + (showHealthColumn ? 1 : 0) + (showHealthColumn && hasEditableHealth ? 1 : 0);
+    // Columns: base (4) + health + temp HP (when any row is editable). Rows render matching cells.
+    const showHealthColumn = showPlayerHealthColumn(settings);
+    const showTempColumn = showHealthColumn && items.some((item) => playerCanEditHP(item, settings));
+    const colCount = 4 + (showHealthColumn ? 1 : 0) + (showTempColumn ? 1 : 0);
 
     // Memoize the initiative token IDs to avoid unnecessary recalculations
     const initiativeTokenIds = useMemo(() =>
@@ -72,7 +72,7 @@ export default function PlayerTable({
                         <TableCell width={60} align="center"></TableCell>
                         <TableCell align="center">NAME</TableCell>
                         {showHealthColumn && <TableCell width={62} align="center">HEALTH</TableCell>}
-                        {showHealthColumn && hasEditableHealth && <TableCell width={36} align="center">TEMP</TableCell>}
+                        {showTempColumn && <TableCell width={36} align="center">TEMP</TableCell>}
                     </TableRow>
                 </TableHead>
 
@@ -91,6 +91,7 @@ export default function PlayerTable({
                                 items={items}
                                 colSpan={colCount}
                                 showHealthColumn={showHealthColumn}
+                                showTempColumn={showTempColumn}
                                 updateRow={updateRow}
                             />
                         );
