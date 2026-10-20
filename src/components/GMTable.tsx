@@ -23,6 +23,7 @@ import type { InitiativeSettings } from "./SceneState";
 import type { Group } from "../encounter";
 import type { CMToken } from "./tokens";
 import { useMemo, useEffect } from "react";
+import { canPrev, stagedGroups, turnOrder, type Turn } from "../encounter/turnOrder";
 import StopRounded from "@mui/icons-material/StopRounded";
 import { useRingCoordinatorCleanup, ringCoordinator } from "../hooks/useRingCoordinator";
 
@@ -142,99 +143,27 @@ export default function GmTable({
         ringCoordinator.setActiveTokens(activeTokenIds, ringConfigs);
     }, [ringStateKey, started, ready]);
 
-    const getActiveIndex = (renderItems: RenderItem[]) => {
-        return renderItems.findIndex((item) => {
-            if (item.type === 'group') {
-                return !item.staged && item.items.some(i => i.active);
-            } else {
-                return item.item.active;
-            }
-        });
-    };
-
-    // Create render lists - separate active from staged
+    // Display order is the turn order, by construction.
     const { activeRenderItems, stagedRenderItems } = useMemo(() => {
-        const active: RenderItem[] = [];
-        const staged: RenderItem[] = [];
-
-        // Group items by their groupId
-        const groupedItems = new Map<string, Combatant[]>();
-        const individualItems: Combatant[] = [];
-
-        for (const item of items) {
-            if (item.groupId) {
-                const existing = groupedItems.get(item.groupId) || [];
-                existing.push(item);
-                groupedItems.set(item.groupId, existing);
-            } else {
-                individualItems.push(item);
-            }
-        }
-
-        // Process groups
-        for (const group of groups) {
-            const groupItems = groupedItems.get(group.id) || [];
-            const isStaged = group.staged ?? false;
-
-            const renderItem: RenderItem = {
-                type: 'group',
-                group: group,
-                items: groupItems,
-                staged: isStaged
-            };
-
-            if (isStaged) {
-                staged.push(renderItem);
-            } else {
-                active.push(renderItem);
-            }
-        }
-
-        // Add individual items to active (they're always participating)
-        for (const item of individualItems) {
-            active.push({
-                type: 'individual',
-                item: item
-            });
-        }
-
-        // Sort active items by initiative
-        active.sort((a, b) => {
-            const aInit = a.type === 'group' ? a.group.initiative : a.item.initiative;
-            const bInit = b.type === 'group' ? b.group.initiative : b.item.initiative;
-
-            const af = Math.floor(aInit);
-            const bf = Math.floor(bInit);
-
-            if (bf !== af) return bf - af; // higher integer first
-            if (aInit !== bInit) return aInit - bInit; // then smaller decimal first
-
-            // Stable sort by name
-            const aName = a.type === 'group' ? a.group.name : a.item.name;
-            const bName = b.type === 'group' ? b.group.name : b.item.name;
-            return aName.localeCompare(bName);
-        });
-
-        // Sort staged items by name (initiative doesn't matter when staged)
-        staged.sort((a, b) => {
-            const aName = a.type === 'group' ? a.group.name : a.item.name;
-            const bName = b.type === 'group' ? b.group.name : b.item.name;
-            return aName.localeCompare(bName);
-        });
-
-        return { activeRenderItems: active, stagedRenderItems: staged };
+        const toRenderItem = (turn: Turn): RenderItem => turn.kind === "group"
+            ? { type: "group", group: turn.group, items: turn.members, staged: false }
+            : { type: "individual", item: turn.combatant };
+        const byId = new Map(items.map((c) => [c.id, c]));
+        return {
+            activeRenderItems: turnOrder({ combatants: items, groups }).map(toRenderItem),
+            stagedRenderItems: stagedGroups(groups).map((group): RenderItem => ({
+                type: "group",
+                group,
+                items: group.memberIds.map((id) => byId.get(id)).filter((c): c is Combatant => !!c),
+                staged: true,
+            })),
+        };
     }, [items, groups]);
 
-    const handleGroupStagingToggle = async (_groupId: string, staged: boolean, wasActiveInCombat?: boolean) => {
-        // If we're staging an active group during combat, advance the turn
-        if (staged && wasActiveInCombat) {
-            // The group was active and is now being staged, so advance to next turn
-            await onNext();
-        }
-        onRequestResize?.();
-    };
+    const prevDisabled = !canPrev({ combatants: items, groups, started, round });
 
-    const handleGroupUngroup = () => {
+    // Staging and ungrouping change row counts; the store handles the turn.
+    const handleGroupChanged = () => {
         onRequestResize?.();
     };
 
@@ -330,8 +259,8 @@ export default function GmTable({
                                         onRequestResize?.();
                                     }}
                                     staged={renderItem.staged}
-                                    onGroupStagingToggle={handleGroupStagingToggle}
-                                    onGroupUngroup={handleGroupUngroup}
+                                    onGroupStagingToggle={handleGroupChanged}
+                                    onGroupUngroup={handleGroupChanged}
                                 />
                             );
                         } else {
@@ -477,7 +406,7 @@ export default function GmTable({
                         <IconButton
                             size="small"
                             onClick={onPrev}
-                            disabled={!started || activeRenderItems.length === 0 || (round === 1 && getActiveIndex(activeRenderItems) === 0)}
+                            disabled={prevDisabled}
                         >
                             <NavigateBeforeRounded />
                         </IconButton>
@@ -586,8 +515,8 @@ export default function GmTable({
                                                 onRequestResize?.();
                                             }}
                                             staged={renderItem.staged}
-                                            onGroupStagingToggle={handleGroupStagingToggle}
-                                            onGroupUngroup={handleGroupUngroup}
+                                            onGroupStagingToggle={handleGroupChanged}
+                                            onGroupUngroup={handleGroupChanged}
                                         />
                                     );
                                 }

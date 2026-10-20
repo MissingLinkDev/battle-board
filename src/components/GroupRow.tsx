@@ -107,7 +107,6 @@ export default function GroupRow({
             await encounterStore.setGroupStaged(group.id, newStaged, {
                 controlVisibility: !!globalSettings.groupStagingControlsVisibility,
             });
-            // Parent advances the turn if the active group was staged mid-combat
             onGroupStagingToggle(group.id, newStaged, wasActive && started);
         } catch (error) {
             console.error("Failed to toggle group staging:", error);

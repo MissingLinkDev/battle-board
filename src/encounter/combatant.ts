@@ -91,28 +91,3 @@ export function memberIndex(c: Pick<Combatant, "initiative" | "groupIndex"> | Pi
     if (typeof c.groupIndex === "number") return c.groupIndex;
     return Math.round((c.initiative - Math.floor(c.initiative)) * 10);
 }
-
-/**
- * List order: higher whole initiative first, then smaller decimal first (GM
- * tie-breaks like 15.1 before 15.2), then name. Members of one group stay
- * together in member order.
- */
-export function compareCombatants(a: Combatant, b: Combatant): number {
-    const af = Math.floor(a.initiative);
-    const bf = Math.floor(b.initiative);
-    if (bf !== af) return bf - af;
-
-    if (a.groupId && a.groupId === b.groupId) {
-        const d = memberIndex(a) - memberIndex(b);
-        return d !== 0 ? d : a.name.localeCompare(b.name);
-    }
-
-    const ad = a.groupId ? 0 : a.initiative - af;
-    const bd = b.groupId ? 0 : b.initiative - bf;
-    if (ad !== bd) return ad - bd;
-
-    const ak = a.groupId ? `${a.groupName ?? ""}\u0000${a.groupId}` : a.name;
-    const bk = b.groupId ? `${b.groupName ?? ""}\u0000${b.groupId}` : b.name;
-    if (ak !== bk) return ak.localeCompare(bk);
-    return memberIndex(a) - memberIndex(b) || a.name.localeCompare(b.name);
-}

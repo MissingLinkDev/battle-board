@@ -215,26 +215,120 @@ describe("encounter store", () => {
         });
     });
 
-    describe("turn state", () => {
-        it("setActive changes only the combatants whose flag differs, in one write", async () => {
-            const { store, scene } = await setup([
-                makeToken({ id: "a", metadata: saved({ active: true }) }),
-                makeToken({ id: "b", metadata: saved() }),
-                makeToken({ id: "c", metadata: saved() }),
+    describe("turns", () => {
+        const clock = (started: boolean, round: number) => ({ [SCENE_META_KEY]: { started, round } });
+
+        it("start makes the first turn active in round 1", async () => {
+            const { store } = await setup([
+                makeToken({ id: "slow", metadata: saved({ initiative: 5 }) }),
+                makeToken({ id: "fast", metadata: saved({ initiative: 20 }) }),
             ]);
-            const writesBefore = scene.writes.length;
-            await store.setActive(["b"]);
+            await store.start();
             await flush();
-            expect(scene.writes.slice(writesBefore)).toEqual([{ kind: "items.update", ids: ["a", "b"] }]);
-            expect(store.getState().combatants.filter((c) => c.active).map((c) => c.id)).toEqual(["b"]);
+            expect(store.getState()).toMatchObject({ started: true, round: 1 });
+            expect(store.getState().combatants.filter((c) => c.active).map((c) => c.id)).toEqual(["fast"]);
         });
 
-        it("setClock writes only this extension's scene key", async () => {
-            const { store, scene } = await setup([], { "other.extension/key": { keep: true } });
-            await store.setClock(true, 2);
+        it("next changes only the two combatants whose flag differs, in one item write", async () => {
+            const { store, scene } = await setup([
+                makeToken({ id: "a", metadata: saved({ initiative: 3, active: true }) }),
+                makeToken({ id: "b", metadata: saved({ initiative: 2 }) }),
+                makeToken({ id: "c", metadata: saved({ initiative: 1 }) }),
+            ], clock(true, 1));
+            const writesBefore = scene.writes.length;
+            await store.next();
             await flush();
-            expect(scene.peek().sceneMetadata).toEqual({ "other.extension/key": { keep: true }, [SCENE_META_KEY]: { started: true, round: 2 } });
-            expect(store.getState()).toMatchObject({ started: true, round: 2 });
+            expect(scene.writes.slice(writesBefore)).toEqual([{ kind: "items.update", ids: ["a", "b"] }]);
+        });
+
+        it("next after the last turn starts the next round", async () => {
+            const { store } = await setup([
+                makeToken({ id: "a", metadata: saved({ initiative: 3 }) }),
+                makeToken({ id: "b", metadata: saved({ initiative: 2, active: true }) }),
+            ], clock(true, 1));
+            await store.next();
+            await flush();
+            expect(store.getState().round).toBe(2);
+            expect(store.getState().combatants.find((c) => c.active)?.id).toBe("a");
+        });
+
+        it("two quick Next presses advance two turns (no stale round or order)", async () => {
+            const { store } = await setup([
+                makeToken({ id: "a", metadata: saved({ initiative: 3, active: true }) }),
+                makeToken({ id: "b", metadata: saved({ initiative: 2 }) }),
+                makeToken({ id: "c", metadata: saved({ initiative: 1 }) }),
+            ], clock(true, 1));
+            await Promise.all([store.next(), store.next()]);
+            await flush();
+            expect(store.getState().combatants.find((c) => c.active)?.id).toBe("c");
+        });
+
+        it("prev does nothing on the first turn of round 1", async () => {
+            const { store, scene } = await setup([
+                makeToken({ id: "a", metadata: saved({ initiative: 3, active: true }) }),
+                makeToken({ id: "b", metadata: saved({ initiative: 2 }) }),
+            ], clock(true, 1));
+            const writesBefore = scene.writes.length;
+            await store.prev();
+            expect(scene.writes.length).toBe(writesBefore);
+        });
+
+        it("removing the turn holder passes the turn to the next turn", async () => {
+            const { store } = await setup([
+                makeToken({ id: "a", metadata: saved({ initiative: 3 }) }),
+                makeToken({ id: "b", metadata: saved({ initiative: 2, active: true }) }),
+                makeToken({ id: "c", metadata: saved({ initiative: 1 }) }),
+            ], clock(true, 1));
+            await store.remove(["b"]);
+            await flush();
+            expect(store.getState().combatants.find((c) => c.active)?.id).toBe("c");
+        });
+
+        it("removing the last turn's holder wraps to the first turn of the next round", async () => {
+            const { store } = await setup([
+                makeToken({ id: "a", metadata: saved({ initiative: 3 }) }),
+                makeToken({ id: "b", metadata: saved({ initiative: 2, active: true }) }),
+            ], clock(true, 4));
+            await store.remove(["b"]);
+            await flush();
+            expect(store.getState()).toMatchObject({ round: 5 });
+            expect(store.getState().combatants.find((c) => c.active)?.id).toBe("a");
+        });
+
+        it("removing one member of the active group keeps the turn with the group", async () => {
+            const { store } = await setup([
+                makeToken({ id: "m0", metadata: saved({ groupId: "g", initiative: 9, groupIndex: 0, active: true }) }),
+                makeToken({ id: "m1", metadata: saved({ groupId: "g", initiative: 9, groupIndex: 1, active: true }) }),
+                makeToken({ id: "solo", metadata: saved({ initiative: 2 }) }),
+            ], clock(true, 1));
+            await store.remove(["m0"]);
+            await flush();
+            expect(store.getState().combatants.filter((c) => c.active).map((c) => c.id)).toEqual(["m1"]);
+        });
+
+        it("staging the active group passes the turn to the next turn, not the first", async () => {
+            const { store } = await setup([
+                makeToken({ id: "first", metadata: saved({ initiative: 20 }) }),
+                makeToken({ id: "m0", metadata: saved({ groupId: "g", initiative: 10, active: true }) }),
+                makeToken({ id: "m1", metadata: saved({ groupId: "g", initiative: 10, groupIndex: 1, active: true }) }),
+                makeToken({ id: "after", metadata: saved({ initiative: 5 }) }),
+            ], clock(true, 2));
+            await store.setGroupStaged("g", true, { controlVisibility: false });
+            await flush();
+            expect(store.getState().combatants.filter((c) => c.active).map((c) => c.id)).toEqual(["after"]);
+            expect(store.getState().round).toBe(2);
+        });
+
+        it("end clears the turn and writes only this extension's scene key", async () => {
+            const { store, scene } = await setup(
+                [makeToken({ id: "a", metadata: saved({ active: true }) })],
+                { ...clock(true, 3), "other.extension/key": { keep: true } },
+            );
+            await store.end();
+            await flush();
+            expect(store.getState()).toMatchObject({ started: false, round: 0 });
+            expect(store.getState().combatants[0].active).toBe(false);
+            expect(scene.peek().sceneMetadata["other.extension/key"]).toEqual({ keep: true });
         });
     });
 

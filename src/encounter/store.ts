@@ -2,8 +2,9 @@ import { isImage, type Item } from "@owlbear-rodeo/sdk";
 import { createMetaForItem, isMetadata, META_KEY, type MetaShape } from "../components/metadata";
 import { getPluginId } from "../getPluginId";
 import type { ObrPort, Unsubscribe } from "../obr/port";
-import { compareCombatants, memberIndex, toCombatant, type Combatant, type CombatantPatch } from "./combatant";
+import { memberIndex, toCombatant, type Combatant, type CombatantPatch } from "./combatant";
 import { deriveGroups, newGroupId, type Group } from "./groups";
+import * as turns from "./turnOrder";
 
 export const SCENE_META_KEY = getPluginId("sceneState");
 export const ITEM_ADDED_CHANNEL = "com.missing-link-dev.battle-board/item-added";
@@ -11,7 +12,7 @@ export const ITEM_ADDED_CHANNEL = "com.missing-link-dev.battle-board/item-added"
 export type EncounterState = {
     /** True once items and scene state have loaded. */
     ready: boolean;
-    /** Combatants in list order. */
+    /** Combatants in display order, which is the turn order (see turnOrder.ts). */
     combatants: Combatant[];
     groups: Group[];
     started: boolean;
@@ -42,16 +43,13 @@ export function createEncounterStore(port: ObrPort) {
     }
 
     function applyItems(items: Item[]) {
-        const combatants = combatantsOf(items).sort(compareCombatants);
-        setState({ combatants, groups: deriveGroups(combatants) });
+        const combatants = combatantsOf(items);
+        const groups = deriveGroups(combatants);
+        setState({ combatants: turns.orderCombatants(combatants, groups), groups });
     }
 
     function applyScene(metadata: Record<string, unknown>) {
-        const raw = metadata[SCENE_META_KEY] as { started?: unknown; round?: unknown } | undefined;
-        setState({
-            started: raw?.started === true,
-            round: typeof raw?.round === "number" ? raw.round : 0,
-        });
+        setState(readClock(metadata));
     }
 
     function startSync() {
@@ -77,22 +75,57 @@ export function createEncounterStore(port: ObrPort) {
         return { items, combatants, groups: deriveGroups(combatants) };
     }
 
+    /** `snapshot` plus the encounter clock, for turn commands. */
+    async function turnSnapshot(): Promise<turns.TurnState> {
+        const [{ combatants, groups }, scene] = await Promise.all([snapshot(), port.sceneMetadata.get()]);
+        return { combatants, groups, ...readClock(scene) };
+    }
+
+    // Commands that can move the turn run one at a time, each on fresh state.
+    let queue: Promise<unknown> = Promise.resolve();
+    function exclusive<T>(operation: () => Promise<T>): Promise<T> {
+        const run = queue.then(operation, operation);
+        queue = run.catch(() => {});
+        return run;
+    }
+
+    /**
+     * One write that applies `edit` to `ids` and, when the turn moves, sets
+     * exactly `change.activeIds` active; then the round, if it changed.
+     */
+    async function writeWithTurn(state: turns.TurnState, ids: string[], edit: (meta: MetaShape, item: Item) => void, change: turns.TurnChange | null) {
+        const target = change ? new Set(change.activeIds) : null;
+        const flips = target ? state.combatants.filter((c) => c.active !== target.has(c.id)).map((c) => c.id) : [];
+        const touched = [...new Set([...ids, ...flips])];
+        if (touched.length) {
+            await port.items.update(touched, (items) => {
+                for (const item of items) {
+                    const meta = savedMeta(item);
+                    if (!meta) continue;
+                    if (target) meta.active = target.has(item.id);
+                    if (ids.includes(item.id)) edit(meta, item);
+                }
+            });
+        }
+        if (change && change.round !== state.round) await setClock(true, change.round);
+    }
+
     async function announceAdded(ids: string[]) {
         for (const id of ids) await port.broadcast.send(ITEM_ADDED_CHANNEL, id, "LOCAL");
     }
 
-    /** Take combatants out of initiative. Their tokens keep all saved data. */
-    async function remove(ids: string[]) {
+    /**
+     * Take combatants out of initiative. Their tokens keep all saved data. If
+     * the turn holder leaves, the turn passes on.
+     */
+    const remove = (ids: string[]) => exclusive(async () => {
         if (!ids.length) return;
-        await port.items.update(ids, (items) => {
-            for (const item of items) {
-                const meta = savedMeta(item);
-                if (!meta) continue;
-                meta.inInitiative = false;
-                meta.active = false;
-            }
-        });
-    }
+        const state = await turnSnapshot();
+        await writeWithTurn(state, ids, (meta) => {
+            meta.inInitiative = false;
+            meta.active = false;
+        }, turns.afterLeaving(state, ids));
+    });
 
     /** Write the encounter's started flag and round, touching only this extension's scene key. */
     async function setClock(started: boolean, round: number) {
@@ -198,11 +231,21 @@ export function createEncounterStore(port: ObrPort) {
         remove,
 
         /** Remove every combatant and end the encounter. */
-        async clearAll() {
+        clearAll: () => exclusive(async () => {
             const { combatants } = await snapshot();
-            await remove(combatants.map((c) => c.id));
+            const ids = combatants.map((c) => c.id);
+            if (ids.length) {
+                await port.items.update(ids, (items) => {
+                    for (const item of items) {
+                        const meta = savedMeta(item);
+                        if (!meta) continue;
+                        meta.inInitiative = false;
+                        meta.active = false;
+                    }
+                });
+            }
             await setClock(false, 0);
-        },
+        }),
 
         /** Edit combatant fields. Tokens without saved data are skipped. */
         async patch(ids: string | string[], fields: CombatantPatch) {
@@ -216,22 +259,30 @@ export function createEncounterStore(port: ObrPort) {
             });
         },
 
-        /** Take combatants out of their groups. A token leaving a staged group can be shown again. */
-        async leaveGroup(ids: string[], opts: { showIfWasStaged: boolean }) {
+        /**
+         * Take combatants out of their groups. A token leaving a staged group can
+         * be shown again. Leavers lose the turn unless they were the whole group.
+         */
+        leaveGroup: (ids: string[], opts: { showIfWasStaged: boolean }) => exclusive(async () => {
+            const { groups } = await snapshot();
+            const leaving = new Set(ids);
+            const wholeGroupLeaves = new Set(
+                groups.filter((g) => g.memberIds.every((id) => leaving.has(id))).flatMap((g) => g.memberIds),
+            );
             await port.items.update(ids, (items) => {
                 for (const item of items) {
                     const meta = savedMeta(item);
                     if (!meta) continue;
                     const wasStaged = !!meta.groupStaged;
                     clearGroup(meta);
-                    meta.active = false;
+                    if (!wholeGroupLeaves.has(item.id)) meta.active = false;
                     if (wasStaged && opts.showIfWasStaged) item.visible = true;
                 }
             });
-        },
+        }),
 
         /** Dissolve a group. If it held the turn, its first member keeps it. */
-        async ungroup(groupId: string) {
+        ungroup: (groupId: string) => exclusive(async () => {
             const { groups } = await snapshot();
             const group = groups.find((g) => g.id === groupId);
             if (!group) return;
@@ -244,7 +295,7 @@ export function createEncounterStore(port: ObrPort) {
                     meta.active = group.active && item.id === first;
                 }
             });
-        },
+        }),
 
         async setGroupInitiative(groupId: string, initiative: number) {
             const { groups } = await snapshot();
@@ -274,37 +325,55 @@ export function createEncounterStore(port: ObrPort) {
             });
         },
 
-        /** Stage or release a group. Members lose the turn; tokens hide/show when `controlVisibility`. */
-        async setGroupStaged(groupId: string, staged: boolean, opts: { controlVisibility: boolean }) {
-            const { groups } = await snapshot();
-            const group = groups.find((g) => g.id === groupId);
+        /**
+         * Stage or release a group. Staging the group whose turn it is passes the
+         * turn on; released members start inactive. Tokens hide/show when
+         * `controlVisibility`.
+         */
+        setGroupStaged: (groupId: string, staged: boolean, opts: { controlVisibility: boolean }) => exclusive(async () => {
+            const state = await turnSnapshot();
+            const group = state.groups.find((g) => g.id === groupId);
             if (!group) return;
-            await port.items.update(group.memberIds, (items) => {
-                for (const item of items) {
-                    const meta = savedMeta(item);
-                    if (!meta) continue;
-                    meta.groupStaged = staged;
-                    meta.active = false;
-                    if (opts.controlVisibility) item.visible = !staged;
-                }
-            });
-        },
+            await writeWithTurn(state, group.memberIds, (meta, item) => {
+                meta.groupStaged = staged;
+                meta.active = false;
+                if (opts.controlVisibility) item.visible = !staged;
+            }, staged ? turns.afterLeaving(state, group.memberIds) : null);
+        }),
 
-        /** Make exactly these combatants active (null = nobody), in one write. */
-        async setActive(ids: string[] | null) {
-            const target = new Set(ids ?? []);
-            const { combatants } = await snapshot();
-            const changed = combatants.filter((c) => c.active !== target.has(c.id)).map((c) => c.id);
-            if (!changed.length) return;
-            await port.items.update(changed, (items) => {
-                for (const item of items) {
-                    const meta = savedMeta(item);
-                    if (meta) meta.active = target.has(item.id);
-                }
-            });
-        },
+        /** Begin the encounter at the first turn of round 1. */
+        start: () => exclusive(async () => {
+            const state = await turnSnapshot();
+            const change = turns.start(state);
+            if (!change) return;
+            await writeWithTurn(state, [], () => {}, change);
+            await setClock(true, 1);
+        }),
 
-        setClock,
+        /** End the encounter: nobody active, round 0. */
+        end: () => exclusive(async () => {
+            const state = await turnSnapshot();
+            await writeWithTurn(state, [], () => {}, { activeIds: [], round: state.round });
+            await setClock(false, 0);
+        }),
+
+        next: () => exclusive(async () => {
+            const state = await turnSnapshot();
+            await writeWithTurn(state, [], () => {}, turns.next(state));
+        }),
+
+        prev: () => exclusive(async () => {
+            const state = await turnSnapshot();
+            await writeWithTurn(state, [], () => {}, turns.prev(state));
+        }),
+    };
+}
+
+function readClock(metadata: Record<string, unknown>): { started: boolean; round: number } {
+    const raw = metadata[SCENE_META_KEY] as { started?: unknown; round?: unknown } | undefined;
+    return {
+        started: raw?.started === true,
+        round: typeof raw?.round === "number" ? raw.round : 0,
     };
 }
 
