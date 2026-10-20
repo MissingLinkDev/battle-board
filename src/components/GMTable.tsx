@@ -233,7 +233,6 @@ export default function GmTable({
                                     globalSettings={globalSettings}
                                     started={started}
                                     tokens={tokens}
-                                    items={items}
                                     colSpan={gmColCount}
                                     groups={groups}
                                     hideInitiative={false}

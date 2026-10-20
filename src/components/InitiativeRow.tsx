@@ -50,7 +50,6 @@ type Props = {
     globalSettings: InitiativeSettings;
     started: boolean;
     tokens: CMToken[];
-    items?: Combatant[];
     colSpan?: number;
     groups: Group[];
     hideInitiative?: boolean;
@@ -67,7 +66,6 @@ export default function InitiativeRow({
     settings,
     globalSettings,
     tokens,
-    items,
     started,
     colSpan,
     groups = [],
@@ -88,7 +86,7 @@ export default function InitiativeRow({
     const dmPreview = !!row.dmPreview;
 
     // Centralized hooks
-    const distances = useDistances(row.id, tokens, settings?.showDistances, "box", items, globalSettings.roundDistances);
+    const distances = useDistances(row.id, tokens, !!settings?.showDistances && !!expanded, globalSettings.roundDistances);
     const { config } = useRingState(row);
 
 

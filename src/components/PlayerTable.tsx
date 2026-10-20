@@ -88,7 +88,6 @@ export default function PlayerTable({
                                 tokenUrl={tokenData?.id ? undefined : undefined} // Let PlayerRow handle token URL fetching
                                 settings={settings}
                                 tokens={filteredTokens}
-                                items={items}
                                 colSpan={colCount}
                                 showHealthColumn={showHealthColumn}
                                 showTempColumn={showTempColumn}

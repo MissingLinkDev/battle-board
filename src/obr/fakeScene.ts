@@ -1,4 +1,4 @@
-import type { Item, Metadata } from "@owlbear-rodeo/sdk";
+import type { GridMeasurement, Item, Metadata } from "@owlbear-rodeo/sdk";
 import type { BroadcastDestination, ObrPort, Role, Unsubscribe } from "./port";
 
 /**
@@ -8,7 +8,11 @@ import type { BroadcastDestination, ObrPort, Role, Unsubscribe } from "./port";
  * the write's promise resolves. Tests should still `await flush()` before
  * asserting on what other subscribers saw.
  */
-export function createFakeScene(initial: { items?: Item[]; sceneMetadata?: Metadata; roomMetadata?: Metadata } = {}) {
+export type FakeGrid = { dpi: number; multiplier: number; unit: string; measurement: GridMeasurement };
+
+export function createFakeScene(initial: { items?: Item[]; sceneMetadata?: Metadata; roomMetadata?: Metadata; grid?: Partial<FakeGrid> } = {}) {
+    let grid: FakeGrid = { dpi: 150, multiplier: 5, unit: "ft", measurement: "CHEBYSHEV", ...initial.grid };
+    const gridListeners = new Set<() => void>();
     let items: Item[] = clone(initial.items ?? []);
     let sceneMetadata: Metadata = clone(initial.sceneMetadata ?? {});
     let roomMetadata: Metadata = clone(initial.roomMetadata ?? {});
@@ -98,12 +102,32 @@ export function createFakeScene(initial: { items?: Item[]; sceneMetadata?: Metad
             player: {
                 getRole: async () => role,
             },
+            grid: {
+                getDpi: async () => grid.dpi,
+                getScale: async () => ({ multiplier: grid.multiplier, unit: grid.unit }),
+                getMeasurement: async () => grid.measurement,
+                async getDistance(from, to) {
+                    // Square grid only.
+                    const dx = Math.abs(to.x - from.x) / grid.dpi;
+                    const dy = Math.abs(to.y - from.y) / grid.dpi;
+                    if (grid.measurement === "CHEBYSHEV") return Math.max(dx, dy);
+                    if (grid.measurement === "MANHATTAN") return dx + dy;
+                    if (grid.measurement === "ALTERNATING") return Math.max(dx, dy) + Math.floor(Math.min(dx, dy) / 2);
+                    return Math.hypot(dx, dy);
+                },
+                onChange: (cb) => subscribe(gridListeners, cb),
+            },
         };
     }
 
     return {
         connect,
         writes,
+        /** Change the grid (as a GM editing scene settings would) and notify clients. */
+        setGrid(next: Partial<FakeGrid>) {
+            grid = { ...grid, ...next };
+            queueMicrotask(() => gridListeners.forEach((l) => l()));
+        },
         /** Synchronous peek at scene state, for assertions. */
         peek: () => ({ items: clone(items), sceneMetadata: clone(sceneMetadata), roomMetadata: clone(roomMetadata) }),
     };

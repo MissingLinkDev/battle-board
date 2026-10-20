@@ -294,7 +294,6 @@ export default function GroupRow({
                     globalSettings={globalSettings}
                     started={started}
                     tokens={tokens}
-                    items={items}
                     colSpan={colSpan}
                     groups={groups}
                     hideInitiative={true}

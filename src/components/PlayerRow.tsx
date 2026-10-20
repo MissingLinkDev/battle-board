@@ -27,7 +27,6 @@ type Props = {
     tokenUrl?: string;
     settings: InitiativeSettings;
     tokens: CMToken[];
-    items?: Combatant[];
     colSpan?: number;
     showHealthColumn: boolean;
     showTempColumn: boolean;
@@ -39,7 +38,6 @@ export default function PlayerRow({
     tokenUrl,
     settings,
     tokens,
-    items,
     colSpan,
     showHealthColumn,
     showTempColumn,
@@ -50,7 +48,7 @@ export default function PlayerRow({
     const prevActiveRef = useRef(row.active);
 
     // Centralized hooks
-    const distances = useDistances(row.id, tokens, settings.showDistances, "box", items, settings.roundDistances);
+    const distances = useDistances(row.id, tokens, settings.showDistances && open, settings.roundDistances);
     const healthMode = playerHealthMode(row, settings);
     const canEditHP = playerCanEditHP(row, settings);
 

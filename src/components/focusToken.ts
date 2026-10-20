@@ -16,8 +16,8 @@ export async function focusToken(tokenId: string, tokens: CMToken[]): Promise<vo
     ]);
 
     const position = {
-        x: -token.position.x * scale + width / 2,
-        y: -token.position.y * scale + height / 2,
+        x: -token.center.x * scale + width / 2,
+        y: -token.center.y * scale + height / 2,
     };
 
     await OBR.viewport.animateTo({ position, scale });
