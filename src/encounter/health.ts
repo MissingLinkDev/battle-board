@@ -76,9 +76,25 @@ export function showPlayerHealthColumn(settings: HealthSettings): boolean {
         || playerHealthMode({ playerCharacter: false }, settings) !== "none";
 }
 
+/** Whether the mode shows HP as numbers (with or without a bar). */
+export function showsNumbers(mode: HealthMode): boolean {
+    return mode === "numbers" || mode === "barNumbers";
+}
+
+/** Whether the mode shows a health bar. */
+export function showsBar(mode: HealthMode): boolean {
+    return mode === "bar" || mode === "barNumbers";
+}
+
 /** The one rule for player HP editing: enabled, a PC, and PC health shown as numbers. */
 export function playerCanEditHP(c: Pick<Combatant, "playerCharacter">, settings: HealthSettings): boolean {
-    return settings.playerEditableHealth && c.playerCharacter && playerHealthMode(c, settings) === "numbers";
+    return settings.playerEditableHealth && c.playerCharacter && showsNumbers(playerHealthMode(c, settings));
+}
+
+/** Share of max HP left, 0…1, or null when no max HP is set. */
+export function healthFraction(c: Pick<Combatant, "currentHP" | "maxHP">): number | null {
+    if (c.maxHP <= 0) return null;
+    return clamp(c.currentHP / c.maxHP, 0, 1);
 }
 
 /**

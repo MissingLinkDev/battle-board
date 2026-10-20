@@ -18,6 +18,7 @@ import { runSavedDataMigrations } from "../settings/migrations";
 import { obrAdapter } from "../obr/obrAdapter";
 import { registerInitiativeContextMenu } from "./initiativeMenu";
 import { useRingSync } from "../hooks/useRingSync";
+import { useDistanceLineSync } from "../hooks/useDistanceLineSync";
 import { useConcentrationNotifications } from "../hooks/useConcentrationNotifications";
 import { useElevationLabels } from "../hooks/useElevationLabels";
 
@@ -44,6 +45,7 @@ export function InitiativeTracker() {
     } = useInitiativeState();
 
     useRingSync(ready);
+    useDistanceLineSync(ready);
     useElevationLabels(ready);
     const { checks, dismiss } = useConcentrationNotifications();
 

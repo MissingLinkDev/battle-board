@@ -4,7 +4,7 @@ import { getPluginId } from "../getPluginId";
 export const ROOM_META_KEY = getPluginId("roomSettings");
 
 /** What players may see of a combatant's health. */
-export type HealthMode = "none" | "status" | "numbers";
+export type HealthMode = "none" | "status" | "numbers" | "bar" | "barNumbers";
 
 /** Room settings, always complete once read through `migrateSettings`. */
 export type InitiativeSettings = {
@@ -32,6 +32,8 @@ export type InitiativeSettings = {
     // Gameplay
     /** Turn rings for the active PC */
     showRangeRings: boolean;
+    /** Dotted lines from the active PC to every combatant more than two cells away */
+    showDistanceLines: boolean;
     /** Staging a group hides its tokens; releasing shows them */
     groupStagingControlsVisibility: boolean;
 };
@@ -52,6 +54,7 @@ export const DEFAULT_SETTINGS: InitiativeSettings = {
     npcHealthMode: "status",
     playerEditableHealth: false,
     showRangeRings: true,
+    showDistanceLines: false,
     groupStagingControlsVisibility: true,
 };
 

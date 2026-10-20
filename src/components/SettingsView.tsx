@@ -17,7 +17,8 @@ import ExpandMoreRounded from "@mui/icons-material/ExpandMoreRounded";
 import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
 
-import type { InitiativeSettings } from "../settings";
+import type { HealthMode, InitiativeSettings } from "../settings";
+import { useGrid } from "../hooks/useGrid";
 import { encounterStore } from "../encounter";
 import type { Combatant } from "../encounter";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -141,8 +142,8 @@ function HealthModeSelect({
     onChange,
     width = 120,
 }: {
-    value: "none" | "status" | "numbers";
-    onChange: (next: "none" | "status" | "numbers") => void;
+    value: HealthMode;
+    onChange: (next: HealthMode) => void;
     width?: number;
 }) {
     return (
@@ -159,6 +160,8 @@ function HealthModeSelect({
             <MenuItem value="none">None</MenuItem>
             <MenuItem value="status">Status</MenuItem>
             <MenuItem value="numbers">Numbers</MenuItem>
+            <MenuItem value="bar">Health bar</MenuItem>
+            <MenuItem value="barNumbers">Bar + numbers</MenuItem>
         </Select>
     );
 }
@@ -271,6 +274,9 @@ export default function SettingsView({ value, onChange, onBack, rows }: Props) {
 
     // Resolve UI defaults without forcing state writes yet
     const { pcHealthMode, npcHealthMode } = value;
+    const grid = useGrid();
+    // Lines skip anything within two cells: "10ft" on a standard 5ft grid
+    const lineThresholdText = grid ? `${grid.unitsPerCell * 2}${grid.unitLabel}` : "2 cells";
 
     return (
         <Paper ref={rootRef} sx={{ borderRadius: 0, overflowX: "hidden" }}>
@@ -449,6 +455,20 @@ export default function SettingsView({ value, onChange, onBack, rows }: Props) {
                                             checked={!!value.showRangeRings}
                                             onChange={(next) => set({ showRangeRings: next })}
                                             aria-label="toggle-show-range-rings"
+                                        />
+                                    }
+                                />
+
+                                {/* Distance Lines (independent row) */}
+                                <Divider />
+                                <RowShell
+                                    title="Distance Lines"
+                                    description={`PC lines on turn, for distances >${lineThresholdText}.`}
+                                    right={
+                                        <Toggle
+                                            checked={!!value.showDistanceLines}
+                                            onChange={(next) => set({ showDistanceLines: next })}
+                                            aria-label="toggle-show-distance-lines"
                                         />
                                     }
                                 />

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { concentrationAudience, playerCanEditHP, playerHealthMode, setCurrent, setMax, setTemp, showPlayerHealthColumn, status } from "./health";
+import { concentrationAudience, healthFraction, playerCanEditHP, playerHealthMode, setCurrent, setMax, setTemp, showPlayerHealthColumn, status } from "./health";
 
 const hp = (currentHP: number, maxHP: number, tempHP = 0, concentrating = false) => ({ currentHP, maxHP, tempHP, concentrating });
 
@@ -70,6 +70,15 @@ describe("status", () => {
     });
 });
 
+describe("healthFraction", () => {
+    it("is the share of max HP left, clamped, and null without a max", () => {
+        expect(healthFraction({ currentHP: 15, maxHP: 30 })).toBe(0.5);
+        expect(healthFraction({ currentHP: 0, maxHP: 30 })).toBe(0);
+        expect(healthFraction({ currentHP: 40, maxHP: 30 })).toBe(1);
+        expect(healthFraction({ currentHP: 0, maxHP: 0 })).toBeNull();
+    });
+});
+
 describe("what players see and edit", () => {
     const settings = { displayHealthStatusToPlayer: true, pcHealthMode: "numbers", npcHealthMode: "status", playerEditableHealth: true } as const;
     const pc = { playerCharacter: true };
@@ -85,6 +94,8 @@ describe("what players see and edit", () => {
         expect(playerCanEditHP(pc, settings)).toBe(true);
         expect(playerCanEditHP(npc, { ...settings, npcHealthMode: "numbers" })).toBe(false);
         expect(playerCanEditHP(pc, { ...settings, pcHealthMode: "status" })).toBe(false);
+        expect(playerCanEditHP(pc, { ...settings, pcHealthMode: "barNumbers" })).toBe(true);
+        expect(playerCanEditHP(pc, { ...settings, pcHealthMode: "bar" })).toBe(false);
         expect(playerCanEditHP(pc, { ...settings, playerEditableHealth: false })).toBe(false);
     });
 

@@ -12,10 +12,10 @@ import { alpha } from "@mui/material/styles";
 import OBR, { isImage, type Item } from "@owlbear-rodeo/sdk";
 
 import type { Combatant, CombatantPatch } from "../encounter";
-import { HealthDisplay } from "./HealthDisplay";
+import { HealthBar, HealthDisplay } from "./HealthDisplay";
 import { DistancePanel } from "./DistancePanel";
 import { useDistances } from "../hooks/useDistances";
-import { playerCanEditHP, playerHealthMode } from "../encounter/health";
+import { playerCanEditHP, playerHealthMode, showsBar } from "../encounter/health";
 import { useHPEditing } from "../hooks/useHPEditing";
 import { CommitNumberField } from "./CommitFields";
 import type { CMToken } from "./tokens";
@@ -267,52 +267,55 @@ export default function PlayerRow({
                 {showHealthColumn && (
                     <TableCell width={62} align="center" onClick={(e) => e.stopPropagation()} sx={{ cursor: "default" }}>
                         {canEditHP ? (
-                            <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, height: 28 }}>
-                                {/* CURRENT */}
-                                {editingField === "cur" ? (
-                                    <CommitNumberField
-                                        size="small"
-                                        variant="outlined"
-                                        value={row.currentHP}
-                                        allowMath
-                                        min={0}
-                                        max={Math.max(0, row.maxHP)}
-                                        onCommit={commitCurrentHP}
-                                        sx={inputSx}
-                                        slotProps={{
-                                            htmlInput: {
-                                                inputMode: "text",
-                                                pattern: undefined,
-                                                autoFocus: true,
-                                                onFocus: (e: any) => e.currentTarget.select(),
-                                                "aria-label": "current hp",
-                                                style: { textAlign: "center", padding: "0 1px", fontSize: "0.8rem", width: 34 },
-                                            },
-                                        }}
-                                    />
-                                ) : (
-                                    <Typography
-                                        component="button"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setEditingField("cur");
-                                        }}
-                                        style={{ all: "unset", cursor: "text" }}
-                                    >
-                                        <Typography component="span" sx={hpTextSx}>
-                                            {row.currentHP}
+                            <Box sx={{ display: "inline-flex", flexDirection: "column", alignItems: "stretch" }}>
+                                <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, height: 28 }}>
+                                    {/* CURRENT */}
+                                    {editingField === "cur" ? (
+                                        <CommitNumberField
+                                            size="small"
+                                            variant="outlined"
+                                            value={row.currentHP}
+                                            allowMath
+                                            min={0}
+                                            max={Math.max(0, row.maxHP)}
+                                            onCommit={commitCurrentHP}
+                                            sx={inputSx}
+                                            slotProps={{
+                                                htmlInput: {
+                                                    inputMode: "text",
+                                                    pattern: undefined,
+                                                    autoFocus: true,
+                                                    onFocus: (e: any) => e.currentTarget.select(),
+                                                    "aria-label": "current hp",
+                                                    style: { textAlign: "center", padding: "0 1px", fontSize: "0.8rem", width: 34 },
+                                                },
+                                            }}
+                                        />
+                                    ) : (
+                                        <Typography
+                                            component="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setEditingField("cur");
+                                            }}
+                                            style={{ all: "unset", cursor: "text" }}
+                                        >
+                                            <Typography component="span" sx={hpTextSx}>
+                                                {row.currentHP}
+                                            </Typography>
                                         </Typography>
+                                    )}
+    
+                                    <Typography component="span" sx={{ fontSize: "0.95rem", opacity: 0.85 }}>
+                                        /
                                     </Typography>
-                                )}
-
-                                <Typography component="span" sx={{ fontSize: "0.95rem", opacity: 0.85 }}>
-                                    /
-                                </Typography>
-
-                                {/* MAX (read-only for players) */}
-                                <Typography component="span" sx={hpTextSx}>
-                                    {row.maxHP}
-                                </Typography>
+    
+                                    {/* MAX (read-only for players) */}
+                                    <Typography component="span" sx={hpTextSx}>
+                                        {row.maxHP}
+                                    </Typography>
+                                </Box>
+                                {showsBar(healthMode) && <HealthBar row={row} />}
                             </Box>
                         ) : (
                             <HealthDisplay row={row} mode={healthMode} variant="compact" />
