@@ -3,10 +3,10 @@ import type { BroadcastDestination, ObrPort, Role, Unsubscribe } from "./port";
 
 /**
  * In-memory adapter for `ObrPort`. One fake scene is the shared room; each
- * `connect()` returns a port for one client. Change events are delivered
- * asynchronously, so tests should `await flush()` before asserting on what
- * subscribers saw. No ordering between a write's promise and its change event
- * is promised, matching what callers may assume of the real SDK.
+ * `connect()` returns a port for one client. Like the real SDK (see ADR-0004),
+ * a write's change event reaches every client, the writer included, before
+ * the write's promise resolves. Tests should still `await flush()` before
+ * asserting on what other subscribers saw.
  */
 export function createFakeScene(initial: { items?: Item[]; sceneMetadata?: Metadata; roomMetadata?: Metadata } = {}) {
     let items: Item[] = clone(initial.items ?? []);
