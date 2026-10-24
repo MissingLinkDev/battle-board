@@ -11,6 +11,8 @@ export function makeToken(opts: {
     visible?: boolean;
     layer?: "CHARACTER" | "MOUNT";
     position?: { x: number; y: number };
+    /** The owning player's id (`createdUserId`). */
+    owner?: string;
 }): Image {
     return {
         id: opts.id,
@@ -18,7 +20,7 @@ export function makeToken(opts: {
         name: opts.name ?? opts.id,
         visible: opts.visible ?? true,
         locked: false,
-        createdUserId: "test-user",
+        createdUserId: opts.owner ?? "test-user",
         zIndex: 0,
         lastModified: "2026-01-01T00:00:00.000Z",
         lastModifiedUserId: "test-user",

@@ -1,5 +1,5 @@
 import type { GridMeasurement, Item, Metadata } from "@owlbear-rodeo/sdk";
-import type { BroadcastDestination, ObrPort, Role, Unsubscribe } from "./port";
+import type { BroadcastDestination, ObrPort, PartyMember, Role, Unsubscribe } from "./port";
 
 /**
  * In-memory adapter for `ObrPort`. One fake scene is the shared room; each
@@ -20,7 +20,15 @@ export function createFakeScene(initial: { items?: Item[]; sceneMetadata?: Metad
     const itemListeners = new Set<(items: Item[]) => void>();
     const sceneListeners = new Set<(m: Metadata) => void>();
     const roomListeners = new Set<(m: Metadata) => void>();
-    const clients: { id: number; messages: Map<string, Set<(data: unknown) => void>> }[] = [];
+    type Client = { id: number; playerId: string; role: Role; connected: boolean; messages: Map<string, Set<(data: unknown) => void>>; party: Set<(players: PartyMember[]) => void> };
+    const clients: Client[] = [];
+    const othersThan = (client: Client): PartyMember[] =>
+        clients.filter((c) => c !== client && c.connected).map((c) => ({ id: c.playerId, role: c.role }));
+    const emitParty = () => {
+        for (const c of clients) {
+            if (c.connected) queueMicrotask(() => c.party.forEach((l) => l(othersThan(c))));
+        }
+    };
     /** Every write applied to the scene, in order. Lets tests count round-trips. */
     const writes: { kind: "items.update" | "items.add" | "items.delete" | "sceneMetadata" | "roomMetadata"; ids?: string[] }[] = [];
 
@@ -34,9 +42,19 @@ export function createFakeScene(initial: { items?: Item[]; sceneMetadata?: Metad
         return () => listeners.delete(cb);
     };
 
-    function connect(role: Role = "GM"): ObrPort {
-        const client = { id: clients.length, messages: new Map<string, Set<(data: unknown) => void>>() };
+    const ports = new Map<ObrPort, Client>();
+
+    function connect(role: Role = "GM", playerId = `player-${clients.length}`): ObrPort {
+        const client: Client = { id: clients.length, playerId, role, connected: true, messages: new Map(), party: new Set() };
         clients.push(client);
+        const port = portFor(client);
+        ports.set(port, client);
+        emitParty();
+        return port;
+    }
+
+    function portFor(client: Client): ObrPort {
+        const { role } = client;
 
         return {
             items: {
@@ -87,6 +105,7 @@ export function createFakeScene(initial: { items?: Item[]; sceneMetadata?: Metad
             broadcast: {
                 async send(channel, data, destination: BroadcastDestination) {
                     for (const c of clients) {
+                        if (!c.connected) continue;
                         const isSelf = c === client;
                         if (destination === "LOCAL" && !isSelf) continue;
                         if (destination === "REMOTE" && isSelf) continue;
@@ -101,6 +120,11 @@ export function createFakeScene(initial: { items?: Item[]; sceneMetadata?: Metad
             },
             player: {
                 getRole: async () => role,
+                getId: async () => client.playerId,
+            },
+            party: {
+                getPlayers: async () => othersThan(client),
+                onChange: (cb) => subscribe(client.party, cb),
             },
             grid: {
                 getDpi: async () => grid.dpi,
@@ -122,6 +146,13 @@ export function createFakeScene(initial: { items?: Item[]; sceneMetadata?: Metad
 
     return {
         connect,
+        /** Leave the room, as closing the browser tab would. */
+        disconnect(port: ObrPort) {
+            const client = ports.get(port);
+            if (!client) return;
+            client.connected = false;
+            emitParty();
+        },
         writes,
         /** Change the grid (as a GM editing scene settings would) and notify clients. */
         setGrid(next: Partial<FakeGrid>) {

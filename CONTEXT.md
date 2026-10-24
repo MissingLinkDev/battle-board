@@ -73,6 +73,21 @@ What players may see of a combatant's health: none, status only, or numbers. Set
 **Concentration check**:
 A prompt raised when a concentrating combatant takes damage, with DC equal to the greater of 10 and half the damage. Shown to the GM always, and to players only for PCs.
 
+**Owner**:
+The player who owns a token: Owlbear's `createdUserId`, which the GM can reassign in Owlbear. A combatant owned by the GM has no owner in this sense.
+
+### Turn bar
+
+**Turn bar**:
+A player's floating tracker, shown during an encounter when the room setting is on and they own a visible combatant in the turn order. One slide per owned combatant, never per group.
+_Avoid_: Action bar
+
+**Turn resources**:
+What a combatant has used of its turn: action, bonus action, reaction and movement (in grid cells, may exceed its speed). They reset when the combatant's turn starts, including as part of a group turn or by stepping back with Previous. Off-turn only the reaction can be marked used. Starting or ending the encounter, or joining initiative, clears them.
+
+**End turn**:
+A combatant saying it has finished. The turn advances once every counted member has ended: members that are visible and owned by a connected player. A turn with no counted members is driven by the GM as before; the GM's controls always work.
+
 ### Map
 
 **Elevation**:

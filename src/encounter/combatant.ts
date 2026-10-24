@@ -1,5 +1,6 @@
 import type { Item } from "@owlbear-rodeo/sdk";
 import { readMeta, type MetaShape } from "../components/metadata";
+import { readResources, type TurnResources } from "./turnResources";
 
 /** A token taking part in the encounter (see CONTEXT.md). */
 export type Combatant = {
@@ -18,6 +19,10 @@ export type Combatant = {
     attackRange: number;
     elevation: number;
     playerCharacter: boolean;
+    /** The token's owner, Owlbear's `createdUserId`. */
+    ownerId: string;
+    imageUrl?: string;
+    turnResources?: TurnResources | null;
 
     movementColor?: string | null;
     rangeColor?: string | null;
@@ -49,7 +54,7 @@ export function toCombatant(item: Item): Combatant | null {
     const meta = readMeta(item);
     if (!meta || meta.inInitiative === false) return null;
 
-    const img = item as Item & { text?: { plainText?: string } };
+    const img = item as Item & { text?: { plainText?: string }; image?: { url?: string } };
     return {
         id: item.id,
         name: img.text?.plainText || item.name || meta.name || "",
@@ -64,6 +69,9 @@ export function toCombatant(item: Item): Combatant | null {
         attackRange: meta.attackRange,
         elevation: meta.elevation,
         playerCharacter: meta.playerCharacter,
+        ownerId: item.createdUserId,
+        imageUrl: img.image?.url,
+        turnResources: readResources(meta.turnResources),
 
         movementColor: meta.movementColor ?? null,
         rangeColor: meta.rangeColor ?? null,

@@ -21,6 +21,10 @@ import { useRingSync } from "../hooks/useRingSync";
 import { useDistanceLineSync } from "../hooks/useDistanceLineSync";
 import { useConcentrationNotifications } from "../hooks/useConcentrationNotifications";
 import { useElevationLabels } from "../hooks/useElevationLabels";
+import { useTurnEndSync } from "../hooks/useTurnEndSync";
+import { useTurnBarPopover } from "../turnbar/useTurnBarPopover";
+import { usePlayerIdentity } from "../turnbar/usePlayerIdentity";
+import { TurnBarControls } from "../turnbar/TurnBarControls";
 
 export function InitiativeTracker() {
     const role = useRole();
@@ -47,6 +51,9 @@ export function InitiativeTracker() {
     useRingSync(ready);
     useDistanceLineSync(ready);
     useElevationLabels(ready);
+    useTurnEndSync(ready);
+    const { playerId } = usePlayerIdentity();
+    useTurnBarPopover(role, playerId, settings);
     const { checks, dismiss } = useConcentrationNotifications();
 
     // Readiness management
@@ -211,6 +218,7 @@ export function InitiativeTracker() {
                         />
                     )
                 )}
+                {role === "PLAYER" && settings.turnBar && <TurnBarControls />}
             </Box>
 
             {/* Settings View */}

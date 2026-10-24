@@ -36,6 +36,8 @@ export type InitiativeSettings = {
     showDistanceLines: boolean;
     /** Staging a group hides its tokens; releasing shows them */
     groupStagingControlsVisibility: boolean;
+    /** Players get a turn bar for the combatants they own */
+    turnBar: boolean;
 };
 
 export const DEFAULT_SETTINGS: InitiativeSettings = {
@@ -56,6 +58,7 @@ export const DEFAULT_SETTINGS: InitiativeSettings = {
     showRangeRings: true,
     showDistanceLines: false,
     groupStagingControlsVisibility: true,
+    turnBar: false,
 };
 
 /**

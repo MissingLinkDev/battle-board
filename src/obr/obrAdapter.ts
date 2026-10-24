@@ -1,8 +1,10 @@
-import OBR from "@owlbear-rodeo/sdk";
-import type { ObrPort } from "./port";
+import OBR, { type Player } from "@owlbear-rodeo/sdk";
+import type { ObrPort, PartyMember } from "./port";
 
 // The SDK types drafts as immer `Draft<Item>`; they are mutable Items in practice.
 type SdkItemUpdate = Parameters<typeof OBR.scene.items.updateItems>[1];
+
+const toMember = (p: Player): PartyMember => ({ id: p.id, role: p.role });
 
 /** The production adapter: forwards the port to the real Owlbear Rodeo SDK. */
 export const obrAdapter: ObrPort = {
@@ -29,6 +31,11 @@ export const obrAdapter: ObrPort = {
     },
     player: {
         getRole: () => OBR.player.getRole(),
+        getId: () => OBR.player.getId(),
+    },
+    party: {
+        getPlayers: async () => (await OBR.party.getPlayers()).map(toMember),
+        onChange: (callback) => OBR.party.onChange((players) => callback(players.map(toMember))),
     },
     grid: {
         getDpi: () => OBR.scene.grid.getDpi(),

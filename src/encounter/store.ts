@@ -5,6 +5,7 @@ import type { ObrPort, Unsubscribe } from "../obr/port";
 import { memberIndex, toCombatant, type Combatant, type CombatantPatch } from "./combatant";
 import { deriveGroups, newGroupId, type Group } from "./groups";
 import * as turns from "./turnOrder";
+import { resourcesOf, turnOf, type TurnResources } from "./turnResources";
 
 export const SCENE_META_KEY = getPluginId("sceneState");
 export const ITEM_ADDED_CHANNEL = "com.missing-link-dev.battle-board/item-added";
@@ -102,7 +103,12 @@ export function createEncounterStore(port: ObrPort) {
                 for (const item of items) {
                     const meta = savedMeta(item);
                     if (!meta) continue;
-                    if (target) meta.active = target.has(item.id);
+                    if (target && meta.active !== target.has(item.id)) {
+                        meta.active = target.has(item.id);
+                        // A turn starting gets fresh resources; one ending has spent its End turn.
+                        if (meta.active) clearResources(meta);
+                        else if (meta.turnResources?.ended) meta.turnResources.ended = false;
+                    }
                     if (ids.includes(item.id)) edit(meta, item);
                 }
             });
@@ -167,6 +173,8 @@ export function createEncounterStore(port: ObrPort) {
             await port.items.update(tokenIds, (items) => {
                 for (const item of items) {
                     const meta = editableMeta(item);
+                    // Joining starts with fresh turn resources, whatever an earlier encounter left.
+                    if (meta.inInitiative === false) clearResources(meta);
                     meta.inInitiative = true;
                     meta.name = liveName(item) || meta.name;
                     if (opts.solo) {
@@ -215,6 +223,7 @@ export function createEncounterStore(port: ObrPort) {
             await port.items.update(tokenIds, (items) => {
                 for (const item of items) {
                     const meta = editableMeta(item);
+                    if (!wasCombatant.has(item.id)) clearResources(meta);
                     meta.inInitiative = true;
                     meta.name = liveName(item) || meta.name;
                     setGroup(meta, group.id, group.name, group.staged);
@@ -241,6 +250,7 @@ export function createEncounterStore(port: ObrPort) {
                         if (!meta) continue;
                         meta.inInitiative = false;
                         meta.active = false;
+                        clearResources(meta);
                     }
                 });
             }
@@ -341,25 +351,56 @@ export function createEncounterStore(port: ObrPort) {
             }, staged ? turns.afterLeaving(state, group.memberIds) : null);
         }),
 
-        /** Begin the encounter at the first turn of round 1. */
+        /** Begin the encounter at the first turn of round 1, with every combatant's turn resources fresh. */
         start: () => exclusive(async () => {
             const state = await turnSnapshot();
             const change = turns.start(state);
             if (!change) return;
-            await writeWithTurn(state, [], () => {}, change);
+            await writeWithTurn(state, idsWithResources(state.combatants), clearResources, change);
             await setClock(true, 1);
         }),
 
-        /** End the encounter: nobody active, round 0. */
+        /** End the encounter: nobody active, round 0, turn resources cleared. */
         end: () => exclusive(async () => {
             const state = await turnSnapshot();
-            await writeWithTurn(state, [], () => {}, { activeIds: [], round: state.round });
+            await writeWithTurn(state, idsWithResources(state.combatants), clearResources, { activeIds: [], round: state.round });
             await setClock(false, 0);
         }),
 
         next: () => exclusive(async () => {
             const state = await turnSnapshot();
             await writeWithTurn(state, [], () => {}, turns.next(state));
+        }),
+
+        /**
+         * Advance only if `turnKey` is still the active turn. Two GM clients
+         * advancing from the same turn write the same result, so the turn
+         * cannot be skipped twice.
+         */
+        advanceFrom: (turnKey: string) => exclusive(async () => {
+            const state = await turnSnapshot();
+            const active = turns.turnOrder(state).find((t) => t.active);
+            if (active?.key !== turnKey) return;
+            await writeWithTurn(state, [], () => {}, turns.next(state));
+        }),
+
+        /**
+         * Record what a combatant has used this turn, on top of what it had
+         * already used. Off-turn only the reaction can change.
+         */
+        setTurnResources: (id: string, changes: Partial<TurnResources>) => exclusive(async () => {
+            const state = await turnSnapshot();
+            const combatant = state.combatants.find((c) => c.id === id);
+            if (!combatant || !state.started || !turnOf(turns.turnOrder(state), id)) return;
+            const current = resourcesOf(combatant);
+            const next = combatant.active ? { ...current, ...changes } : { ...current, reactionUsed: changes.reactionUsed ?? current.reactionUsed };
+            next.movementUsed = Math.max(0, Math.floor(next.movementUsed));
+            await port.items.update([id], (items) => {
+                for (const item of items) {
+                    const meta = savedMeta(item);
+                    if (meta) meta.turnResources = next;
+                }
+            });
         }),
 
         prev: () => exclusive(async () => {
@@ -411,6 +452,14 @@ function editableMeta(item: Item): MetaShape {
     const created = createMetaForItem(item);
     (item.metadata as Record<string, unknown>)[META_KEY] = created;
     return created;
+}
+
+function clearResources(meta: MetaShape) {
+    if (meta.turnResources) meta.turnResources = null;
+}
+
+function idsWithResources(combatants: Combatant[]): string[] {
+    return combatants.filter((c) => c.turnResources).map((c) => c.id);
 }
 
 function setGroup(meta: MetaShape, id: string, name: string, staged: boolean) {

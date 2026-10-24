@@ -10,6 +10,7 @@ export default defineConfig({
         main: 'index.html',
         elevation: 'elevation.html',
         groupmodal: 'groupmodal.html',
+        turnbar: 'turnbar.html',
       }
     }
   },

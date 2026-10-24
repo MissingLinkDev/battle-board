@@ -16,6 +16,7 @@ export interface ObrPort {
     roomMetadata: MetadataPort;
     broadcast: BroadcastPort;
     player: PlayerPort;
+    party: PartyPort;
     grid: GridPort;
 }
 
@@ -48,6 +49,15 @@ export type Role = "GM" | "PLAYER";
 
 export interface PlayerPort {
     getRole(): Promise<Role>;
+    getId(): Promise<string>;
+}
+
+export type PartyMember = { id: string; role: Role };
+
+export interface PartyPort {
+    /** Everyone else connected to the room; this client is not included. */
+    getPlayers(): Promise<PartyMember[]>;
+    onChange(callback: (players: PartyMember[]) => void): Unsubscribe;
 }
 
 export interface GridPort {

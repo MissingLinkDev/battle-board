@@ -546,6 +546,28 @@ export default function SettingsView({ value, onChange, onBack, rows }: Props) {
                             />
                         </Box>
 
+                        {/* Turn Bar */}
+                        <Box
+                            sx={{
+                                borderRadius: 1,
+                                overflow: "hidden",
+                                border: (t) => `1px solid ${t.palette.divider}`,
+                                mb: 1,
+                            }}
+                        >
+                            <RowShell
+                                title="Turn Bar"
+                                description="Players track actions and movement, and end their own turns."
+                                right={
+                                    <Toggle
+                                        checked={!!value.turnBar}
+                                        onChange={(next) => set({ turnBar: next })}
+                                        aria-label="toggle-turn-bar"
+                                    />
+                                }
+                            />
+                        </Box>
+
                         {/* Group Staging Controls Visibility */}
                         <Box
                             sx={{

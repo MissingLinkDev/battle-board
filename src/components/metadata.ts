@@ -1,5 +1,6 @@
 import { getPluginId } from "../getPluginId";
 import type { Item } from "@owlbear-rodeo/sdk";
+import type { TurnResources } from "../encounter/turnResources";
 
 export const META_KEY = getPluginId("metadata");
 
@@ -53,6 +54,9 @@ export type MetaShape = {
 
     // Concentration tracking
     concentrating?: boolean;
+
+    // Turn bar: what the owner has used this turn; null when fresh (see encounter/turnResources.ts)
+    turnResources?: TurnResources | null;
 
     // DEPRECATED: Keep for migration
     encounterGroups?: string[];

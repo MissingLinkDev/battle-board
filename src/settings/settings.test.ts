@@ -13,6 +13,11 @@ describe("migrateSettings", () => {
         expect(migrateSettings(undefined)).toEqual(DEFAULT_SETTINGS);
     });
 
+    it("leaves the turn bar off unless the GM turns it on", () => {
+        expect(DEFAULT_SETTINGS.turnBar).toBe(false);
+        expect(migrateSettings({ showHP: false }).turnBar).toBe(false);
+    });
+
     it("ignores retired and malformed fields", () => {
         const migrated = migrateSettings({ displayPlayerHealthNumbers: false, showArmor: "yes", pcHealthMode: "status" });
         expect(migrated).toEqual({ ...DEFAULT_SETTINGS, pcHealthMode: "status" });

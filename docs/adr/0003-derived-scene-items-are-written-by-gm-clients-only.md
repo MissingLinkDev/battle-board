@@ -9,4 +9,4 @@ Range rings and elevation labels are scene items computed from combatant data. O
 
 ## Consequences
 
-- With no GM connected, derived items do not update. Players cannot change elevation or turns, so nothing needs redrawing.
+- With no GM connected, derived items do not update. Players cannot change elevation or turns, so nothing needs redrawing. (Players can end a turn from the turn bar, but a GM client makes the move: see ADR-0005.)

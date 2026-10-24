@@ -23,7 +23,7 @@ const fakeRing: RingFactory = (shape) => ({
 
 const c = (id: string, extra: Partial<Combatant> = {}): Combatant => ({
     id, name: id, initiative: 0, active: false, visible: true, ac: 10, currentHP: 10, maxHP: 10, tempHP: 0,
-    movement: 30, attackRange: 60, elevation: 0, playerCharacter: false, ...extra,
+    movement: 30, attackRange: 60, elevation: 0, playerCharacter: false, ownerId: "gm", ...extra,
 });
 
 const settings: InitiativeSettings = DEFAULT_SETTINGS;
